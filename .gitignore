@@ -1,0 +1,27 @@
+# Claude Code local settings (personal, machine-local)
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+
+# Node / Remotion
+node_modules/
+remotion/out/
+.cache/
+
+# Pipeline artifacts
+/input/*
+!/input/.gitkeep
+/output/*
+!/output/.gitkeep
+
+# Whisper model cache
+models/
+
+# OS
+Thumbs.db
+.DS_Store
