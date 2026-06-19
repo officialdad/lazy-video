@@ -1,0 +1,10 @@
+[project]
+name = "lazy-video"
+version = "0.1.0"
+description = "Local pipeline turning one portrait recording into branded vertical reels"
+requires-python = ">=3.12"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "nvidia-cudnn-cu12>=9.0",
+]

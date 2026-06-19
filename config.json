@@ -1,0 +1,27 @@
+{
+  "marker_phrases": ["langkah seterusnya"],
+  "flub_word": "redo",
+  "silence_threshold_sec": 0.4,
+  "default_intensity": "gentle",
+  "whisper_model": "large-v3",
+  "whisper_device": "cuda",
+  "whisper_compute_type": "float16",
+  "output": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "vcodec": "libx264",
+    "acodec": "aac",
+    "crf": 19
+  },
+  "brand": {
+    "caption_font": "Inter",
+    "caption_position": "bottom-third",
+    "caption_color": "#ffffff",
+    "caption_highlight_color": "#ffd400",
+    "caption_bg": "rgba(0,0,0,0.55)",
+    "intro_asset": "assets/intro.mp4",
+    "outro_asset": "assets/outro.mp4",
+    "show_progress_bar": true
+  }
+}
