@@ -6,6 +6,7 @@ import { reelSchema, type ReelProps } from "./schema";
 const DEFAULT_BRAND = {
   caption_font: "Anton",
   caption_uppercase: true,
+  caption_max_words: 4,
   caption_position: "bottom-third",
   caption_color: "#ffffff",
   caption_highlight_color: "#ffd400",

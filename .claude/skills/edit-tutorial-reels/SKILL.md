@@ -83,7 +83,8 @@ All tunables live in `config.json`. Read them; don't hardcode.
 - `default_intensity` — `gentle` | `medium` | `hype` retention motion.
 - `whisper_model` / `whisper_device` — `large-v3` on `cuda` (cpu fallback).
 - `output.*` — render resolution / fps / codec (1080x1920 H.264 30fps).
-- `brand.*` — caption font (`Anton`), `caption_uppercase`, color/position, `show_intro`
+- `brand.*` — caption font (`Anton`), `caption_uppercase`, `caption_max_words` (words on
+  screen at once, default 4; lower to 3 for strictly one row), color/position, `show_intro`
   (default false), intro asset, progress bar, and `cta` (text, swipe transition, duration).
 
 ### Adjusting intensity per episode

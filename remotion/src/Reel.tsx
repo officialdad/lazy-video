@@ -87,6 +87,7 @@ const ContentClip: React.FC<ReelProps> = (props) => {
         bg={props.brand.caption_bg}
         position={props.brand.caption_position}
         uppercase={props.brand.caption_uppercase}
+        maxWords={props.brand.caption_max_words}
       />
 
       {/* thin progress bar */}

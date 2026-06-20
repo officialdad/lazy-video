@@ -10,6 +10,7 @@ type Props = {
   bg: string;
   position: string;
   uppercase: boolean;
+  maxWords: number;
 };
 
 /** Even fallback timing when a cue has no per-word data. */
@@ -23,12 +24,23 @@ const fallbackWords = (cap: Caption): Word[] => {
   }));
 };
 
+/** Split a word list into balanced lines of at most maxWords (avoids a lone trailing word). */
+const toLines = (words: Word[], maxWords: number): Word[][] => {
+  if (words.length <= maxWords) return [words];
+  const numLines = Math.ceil(words.length / maxWords);
+  const per = Math.ceil(words.length / numLines);
+  const lines: Word[][] = [];
+  for (let i = 0; i < words.length; i += per) lines.push(words.slice(i, i + per));
+  return lines;
+};
+
 /**
- * Karaoke build-up: within the active cue, words appear one-by-one exactly when
- * spoken (per-word timestamps) and accumulate; the current word is highlighted.
- * Words not yet spoken are not shown -- keeps the line short and synced to voice.
+ * Karaoke build-up with a consistent word count: each cue is split into balanced
+ * lines of <= maxWords. Only the line containing the currently-spoken word shows,
+ * its words revealed one-by-one at their spoken time, current word highlighted.
+ * Keeps a steady, readable number of words on screen instead of whole sentences.
  */
-export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, position, uppercase }) => {
+export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, position, uppercase, maxWords }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -36,10 +48,25 @@ export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, posi
   const active = captions.find((c) => t >= c.start && t <= c.end);
   if (!active) return null;
 
-  const words = active.words?.length ? active.words : fallbackWords(active);
-  const revealed = words.filter((w) => t >= w.start);
-  if (!revealed.length) return null;
-  const currentIdx = revealed.length - 1;
+  const allWords = active.words?.length ? active.words : fallbackWords(active);
+  const spokenCount = allWords.filter((w) => t >= w.start).length;
+  if (!spokenCount) return null;
+  const globalCurrent = spokenCount - 1;
+
+  // pick the line holding the current word; build up within it
+  const lines = toLines(allWords, Math.max(1, maxWords));
+  let offset = 0;
+  let words = lines[0];
+  let currentIdx = 0;
+  for (const line of lines) {
+    if (globalCurrent < offset + line.length) {
+      words = line;
+      currentIdx = globalCurrent - offset;
+      break;
+    }
+    offset += line.length;
+  }
+  words = words.slice(0, currentIdx + 1); // build-up: only revealed words in this line
 
   const bottom = position === "bottom-third" ? "26%" : "8%";
 
@@ -69,7 +96,7 @@ export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, posi
           boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
         }}
       >
-        {revealed.map((word, i) => {
+        {words.map((word, i) => {
           const pop = spring({
             frame: frame - Math.round(word.start * fps),
             fps,

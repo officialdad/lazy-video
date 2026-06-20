@@ -81,7 +81,9 @@ Key knobs: `marker_phrases` (lesson boundaries -> one reel each), `marker_keep_i
 
 Current locked values: marker `"langkah seterusnya adalah"` (boundary = end of the phrase),
 flub `"redo"`, large-v3 on cuda (RTX 3090), 1080x1920 H.264 30fps. Captions: **Anton, bold,
-ALL CAPS**, karaoke word-by-word reveal driven by per-word timestamps. Every reel ends with
+ALL CAPS**, karaoke word-by-word reveal driven by per-word timestamps, capped at
+`brand.caption_max_words` (default 4) per line so the on-screen word count stays steady
+(whisper cues are split into balanced lines rather than shown whole). Every reel ends with
 a **swipe-left CTA card** (`brand.cta`) that REPLACES the outro sting; `assets/outro.mp4` is
 unused. The intro sting is **off by default** (`brand.show_intro: false`) so reels start
 cold on the hook, like native reels. Default timeline: `content -> swipe CTA` (intro

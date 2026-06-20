@@ -16,6 +16,7 @@ export const captionSchema = z.object({
 export const brandSchema = z.object({
   caption_font: z.string(),
   caption_uppercase: z.boolean().default(true),
+  caption_max_words: z.number().default(4),
   caption_position: z.string(),
   caption_color: z.string(),
   caption_highlight_color: z.string(),
