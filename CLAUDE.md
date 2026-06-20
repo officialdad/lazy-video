@@ -38,10 +38,15 @@ independently and are debuggable in isolation.
 |-------|------|----|-----|
 | 1 Transcribe | `src/transcribe.py` | video | `transcript.json` (words+segments) |
 | 2 EDL | `src/edl.py` + LLM | `transcript.json` | `edl.json` (user-approved) |
-| 3 Cut | `src/cut.py` | `edl.json` + video | `clips/NN_slug.mp4` |
-| 4 Render | `remotion/` | `clips/` + caption cues | `NN_slug.mp4` |
+| 3 Cut | `src/cut.py` | `edl.json` + video | `clips/NN_slug.mp4` + `clips/NN_slug.captions.json` |
+| 4 Render | `src/render.py` -> `remotion/` | `clips/` + per-clip `captions.json` | `NN_slug.mp4` |
 
-`run.py` is the single entrypoint chaining all four (Stage 2 pauses for approval).
+`run.py` is the single entrypoint chaining all four. It is **state-aware**: it runs Stage 1
++ Stage 2 draft, then STOPS for the LLM final pass + user approval; re-running the same
+command sees the approved `edl.json` (`"stage": "final"`) and continues to cut + render.
+
+`src/cut.py` clears stale clips and `src/render.py` clears stale reels each run, so output
+always matches the current EDL when the segment count changes.
 
 ## Commands
 
@@ -54,15 +59,19 @@ cd remotion && npm install                 # remotion deps
 cd remotion && npx remotion browser ensure # headless chrome (one-time)
 
 # Run a single stage (modules, not scripts -- note the -m and package path)
-uv run python -m src.transcribe input/video.mp4
-uv run python -m src.transcribe input/video.mp4 --out output/video/transcript.json
+uv run python -m src.transcribe input/video.mp4   # Stage 1
+uv run python -m src.edl        input/video.mp4   # Stage 2 draft (edl.draft.json)
+uv run python -m src.cut        input/video.mp4   # Stage 3 (needs approved edl.json)
+uv run python -m src.render     input/video.mp4   # Stage 4
 
-# Full pipeline (once run.py exists)
+# Full pipeline: run once -> pauses for EDL approval -> Claude writes edl.json
+# (stage: final) -> user approves -> run the SAME command again to cut + render.
 uv run python run.py input/video.mp4
+uv run python run.py input/video.mp4 --stage transcribe|edl|cut|render|all
 
-# Remotion
-cd remotion && npm run dev      # studio (preview templates)
-cd remotion && npm run render   # render a composition
+# Remotion (preview only; renders go through src/render.py)
+cd remotion && npm run dev          # studio
+cd remotion && npx remotion compositions   # validate the bundle builds
 ```
 
 There is no test suite yet. Validation is done by running a stage on a real clip and
@@ -95,10 +104,18 @@ The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
 ## Environment notes
 
 - faster-whisper runs on CUDA via the `nvidia-cudnn-cu12` / `nvidia-cublas-cu12` pip
-  wheels (ctranslate2 finds the DLLs). `transcribe.py` falls back to cpu/int8 if cuda load
-  fails. large-v3 (~3GB) downloads on first run.
+  wheels. On Windows those DLLs are NOT on the search path by default — `config.add_cuda_dll_dirs()`
+  registers `site-packages/nvidia/*/bin` (add_dll_directory + PATH) before the model loads;
+  `transcribe.py` calls it and falls back to cpu/int8 if cuda load still fails. large-v3
+  (~3GB) downloads on first run.
 - Transcription uses `language=None` (auto-detect) and `task="transcribe"` — never
   `translate`, to preserve the spoken BM/English mix.
+- EDL captions carry per-word timing (`words: [{w, start, end}]`) from `transcript.json`;
+  `cut.py` remaps both cue and word times to clip-local; Remotion drives the karaoke reveal
+  off them. The LLM final pass edits word text but must keep each word's timing.
+- `src/render.py` renders via a small per-render staging dir as Remotion's `--public-dir`
+  (the clip + intro copied in, referenced by basename) — do NOT point `--public-dir` at the
+  repo root, or Remotion copies all of `node_modules` (~3GB) every render.
 - Windows: git warns LF->CRLF on commit; harmless.
 
 ## Working style for this repo
