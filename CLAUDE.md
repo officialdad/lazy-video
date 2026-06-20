@@ -83,7 +83,9 @@ Current locked values: marker `"langkah seterusnya adalah"` (boundary = end of t
 flub `"redo"`, large-v3 on cuda (RTX 3090), 1080x1920 H.264 30fps. Captions: **Anton, bold,
 ALL CAPS**, karaoke word-by-word reveal driven by per-word timestamps. Every reel ends with
 a **swipe-left CTA card** (`brand.cta`) that REPLACES the outro sting; `assets/outro.mp4` is
-unused. Timeline: `intro -> content -> swipe CTA`.
+unused. The intro sting is **off by default** (`brand.show_intro: false`) so reels start
+cold on the hook, like native reels. Default timeline: `content -> swipe CTA` (intro
+prepended only when `show_intro` is true).
 
 The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
 `.claude/skills/` for Claude Code to auto-discover it — a root SKILL.md is not loaded).

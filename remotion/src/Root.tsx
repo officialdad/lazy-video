@@ -17,8 +17,8 @@ const DEFAULT_BRAND = {
 // Preview defaults; the real values are injected per-render via --props.
 const DEFAULT_PROPS: ReelProps = {
   clipSrc: "01_rm80-boleh-buat-apa.mp4",
-  introSrc: "intro.mp4",
-  introDur: 2,
+  introSrc: "",
+  introDur: 0,
   clipDur: 6,
   title: "RM80 Boleh Buat Apa?",
   intensity: "gentle",
@@ -50,7 +50,7 @@ export const RemotionRoot: React.FC = () => {
       fps={FPS}
       width={1080}
       height={1920}
-      durationInFrames={Math.round((2 + 6 + 1.6) * FPS)}
+      durationInFrames={Math.round((0 + 6 + 1.6) * FPS)}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.round((props.introDur + props.clipDur + props.cta.durationSec) * FPS),
         fps: FPS,

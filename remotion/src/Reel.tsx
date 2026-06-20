@@ -140,11 +140,13 @@ export const Reel: React.FC<ReelProps> = (props) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.brand.bg_color }}>
-      <Sequence durationInFrames={introF}>
-        <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
-          <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        </AbsoluteFill>
-      </Sequence>
+      {introF > 0 && props.introSrc ? (
+        <Sequence durationInFrames={introF}>
+          <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+            <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </AbsoluteFill>
+        </Sequence>
+      ) : null}
 
       <Sequence from={introF} durationInFrames={clipF}>
         <ContentClip {...props} />

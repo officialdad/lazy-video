@@ -51,9 +51,10 @@ All tunables live in `config.json`. Key knobs:
 | `output.*` | render resolution / fps / codec |
 | `brand.*` | caption font (Anton) / uppercase / color / position, intro asset, progress bar, `cta` |
 
-Captions are **Anton, bold, ALL CAPS** with karaoke word-by-word reveal. Every reel ends
-with a **swipe-left CTA card** (`brand.cta`) instead of an outro sting. Per-episode you can
-override `intensity` on individual segments in the EDL.
+Captions are **Anton, bold, ALL CAPS** with karaoke word-by-word reveal. Reels start cold on
+the content (no intro sting by default — `brand.show_intro: false`) and end with a
+**swipe-left CTA card** (`brand.cta`) instead of an outro. Per-episode you can override
+`intensity` on individual segments in the EDL.
 
 ## Drop-and-go
 

@@ -46,7 +46,7 @@ def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
 
 
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
-                intro_dur: float, out_dir: Path) -> Path:
+                intro_src: str, intro_dur: float, out_dir: Path) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
     clip_path = cues_path.with_name(cues["clip"])
@@ -62,7 +62,7 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
 
     props = {
         "clipSrc": clip_path.name,        # basename; public dir = staging dir
-        "introSrc": "intro.mp4",
+        "introSrc": intro_src,            # "" when intro disabled (reel starts cold)
         "introDur": intro_dur,
         "clipDur": cues["duration"],
         "title": cues["title"],
@@ -99,15 +99,20 @@ def run(video: Path, cfg: dict | None = None) -> list[Path]:
     for old in out_dir.glob("[0-9][0-9]_*.mp4"):
         old.unlink()
 
-    intro = ROOT / cfg["brand"]["intro_asset"]
-    intro_dur = ffprobe_duration(intro)
-
     # small staging dir so Remotion isn't copying the whole repo (node_modules)
     public_dir = out_dir / "_render_public"
     public_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(intro, public_dir / "intro.mp4")
+
+    # intro is off by default -- reels start cold on content (the hook).
+    if cfg["brand"].get("show_intro", False):
+        intro = ROOT / cfg["brand"]["intro_asset"]
+        shutil.copy2(intro, public_dir / "intro.mp4")
+        intro_src, intro_dur = "intro.mp4", ffprobe_duration(intro)
+    else:
+        intro_src, intro_dur = "", 0.0
+
     try:
-        outputs = [render_clip(cf, cfg, public_dir, intro_dur, out_dir)
+        outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)

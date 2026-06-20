@@ -66,8 +66,10 @@ write hooks — that needs reading. Do not skip your pass.
   boundary is the END of "adalah" (the phrase stays as the reel's spoken lead-out); the
   next reel starts at the next topic.
 - Every reel ends with a **swipe-left CTA card** ("FOLLOW & STAY TUNED") that REPLACES the
-  outro sting. Intro sting still plays first.
-- Reel timeline: `intro -> content (drift + punch-in + karaoke captions) -> swipe CTA`.
+  outro sting.
+- Reels start cold on the content (no intro sting by default — set `brand.show_intro: true`
+  to prepend `assets/intro.mp4`).
+- Default reel timeline: `content (drift + punch-in + karaoke captions) -> swipe CTA`.
 
 ## Config knobs (config.json)
 
@@ -81,8 +83,8 @@ All tunables live in `config.json`. Read them; don't hardcode.
 - `default_intensity` — `gentle` | `medium` | `hype` retention motion.
 - `whisper_model` / `whisper_device` — `large-v3` on `cuda` (cpu fallback).
 - `output.*` — render resolution / fps / codec (1080x1920 H.264 30fps).
-- `brand.*` — caption font (`Anton`), `caption_uppercase`, color/position, intro asset,
-  progress bar, and `cta` (text, swipe transition, duration).
+- `brand.*` — caption font (`Anton`), `caption_uppercase`, color/position, `show_intro`
+  (default false), intro asset, progress bar, and `cta` (text, swipe transition, duration).
 
 ### Adjusting intensity per episode
 
