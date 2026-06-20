@@ -27,11 +27,12 @@ import sys
 import time
 from pathlib import Path
 
-from .config import load_config, output_dir_for
+from .config import add_cuda_dll_dirs, load_config, output_dir_for
 
 
 def transcribe(video: Path, cfg: dict) -> dict:
     """Transcribe a video to word-level timestamps using faster-whisper."""
+    add_cuda_dll_dirs()  # register nvidia wheel DLL dirs before CUDA loads
     from faster_whisper import WhisperModel
 
     model_name = cfg["whisper_model"]

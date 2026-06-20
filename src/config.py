@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -28,6 +29,34 @@ def output_dir_for(video: Path) -> Path:
     d = OUTPUT_ROOT / video_name(video)
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def add_cuda_dll_dirs() -> None:
+    """Make the nvidia pip-wheel CUDA DLLs discoverable on Windows.
+
+    faster-whisper/ctranslate2 load cublas64_12.dll and cudnn at inference
+    time, but Windows does not search site-packages/nvidia/*/bin by default.
+    Register those dirs so the DLLs resolve. No-op off Windows / if absent.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import nvidia  # provided by the nvidia-* pip wheels
+    except ImportError:
+        return
+    # `nvidia` is a namespace package: __file__ is None, use __path__.
+    found: list[str] = []
+    for root in map(Path, nvidia.__path__):
+        for bindir in root.glob("*/bin"):
+            found.append(str(bindir))
+            try:
+                os.add_dll_directory(str(bindir))
+            except OSError:
+                pass
+    # add_dll_directory alone is not honored by ctranslate2's loader; also
+    # prepend the dirs to PATH, which the DLL search does respect.
+    if found:
+        os.environ["PATH"] = os.pathsep.join(found) + os.pathsep + os.environ.get("PATH", "")
 
 
 def slugify(text: str) -> str:
