@@ -179,3 +179,22 @@ Given a ~10-min portrait recording with 5 markers and 2 `redo` flubs, `python ru
 produces 5 numbered branded reels in `/output/<name>/`, captions correct in mixed
 BM/English with technical terms intact, flubs gone, dead air trimmed, every clip gentle
 motion. No manual editing.
+
+## Revision 2026-06-20b (approved)
+
+Changes after the first working end-to-end build:
+
+- **SKILL.md location.** Moved to `.claude/skills/edit-tutorial-reels/SKILL.md` so Claude
+  Code auto-discovers it (a root `SKILL.md` is not loaded as a skill).
+- **Marker + transition.** Marker phrase is now `"langkah seterusnya adalah"`; the boundary
+  is the END of the phrase (`marker_keep_in_segment: true`), keeping it as the reel's spoken
+  lead-out. Every reel ends with a **swipe-left CTA card** ("FOLLOW & STAY TUNED",
+  `brand.cta`) that REPLACES the outro sting. `assets/outro.mp4` is now unused. Timeline:
+  `intro -> content -> swipe CTA`.
+- **Captions.** Font is **Anton, bold, ALL CAPS** (`caption_uppercase`). Reveal is
+  **karaoke build-up**: words appear one-by-one at their spoken time (per-word timestamps
+  carried transcript -> EDL -> cut remap -> Remotion), accumulating across the line, current
+  word highlighted. EDL captions now include a `words: [{w, start, end}]` array; the LLM
+  final pass edits word text while preserving timing.
+- **Robustness.** `cut.py` clears stale clips and `render.py` clears stale reels so output
+  always matches the current EDL (segment count can change between runs).

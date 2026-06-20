@@ -1,22 +1,34 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Caption } from "./schema";
+import { CAPTION_FONT } from "./fonts";
+import type { Caption, Word } from "./schema";
 
 type Props = {
   captions: Caption[];
-  font: string;
   color: string;
   highlight: string;
   bg: string;
   position: string;
+  uppercase: boolean;
+};
+
+/** Even fallback timing when a cue has no per-word data. */
+const fallbackWords = (cap: Caption): Word[] => {
+  const toks = cap.text.split(/\s+/).filter(Boolean);
+  const span = Math.max(cap.end - cap.start, 0.001);
+  return toks.map((w, i) => ({
+    w,
+    start: cap.start + (span * i) / toks.length,
+    end: cap.start + (span * (i + 1)) / toks.length,
+  }));
 };
 
 /**
- * Phrase-synced captions with per-word highlight. We only have phrase-level
- * timestamps, so each word's highlight time is interpolated evenly across the
- * cue's duration -- gives a karaoke feel without per-word data.
+ * Karaoke build-up: within the active cue, words appear one-by-one exactly when
+ * spoken (per-word timestamps) and accumulate; the current word is highlighted.
+ * Words not yet spoken are not shown -- keeps the line short and synced to voice.
  */
-export const Captions: React.FC<Props> = ({ captions, font, color, highlight, bg, position }) => {
+export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, position, uppercase }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -24,18 +36,10 @@ export const Captions: React.FC<Props> = ({ captions, font, color, highlight, bg
   const active = captions.find((c) => t >= c.start && t <= c.end);
   if (!active) return null;
 
-  const words = active.text.split(/\s+/);
-  const span = Math.max(active.end - active.start, 0.001);
-  const progressed = (t - active.start) / span;
-  const litCount = Math.floor(progressed * words.length + 0.0001);
-
-  const pop = spring({
-    frame: frame - Math.round(active.start * fps),
-    fps,
-    config: { damping: 200, mass: 0.5, stiffness: 140 },
-  });
-  const scale = interpolate(pop, [0, 1], [0.92, 1]);
-  const opacity = interpolate(pop, [0, 1], [0, 1]);
+  const words = active.words?.length ? active.words : fallbackWords(active);
+  const revealed = words.filter((w) => t >= w.start);
+  if (!revealed.length) return null;
+  const currentIdx = revealed.length - 1;
 
   const bottom = position === "bottom-third" ? "26%" : "8%";
 
@@ -48,40 +52,52 @@ export const Captions: React.FC<Props> = ({ captions, font, color, highlight, bg
         bottom,
         display: "flex",
         justifyContent: "center",
-        padding: "0 80px",
+        padding: "0 70px",
       }}
     >
       <div
         style={{
-          transform: `scale(${scale})`,
-          opacity,
           background: bg,
-          borderRadius: 28,
-          padding: "24px 36px",
-          maxWidth: "90%",
+          borderRadius: 24,
+          padding: "20px 34px",
+          maxWidth: "92%",
           display: "flex",
           flexWrap: "wrap",
           justifyContent: "center",
-          gap: "0 16px",
+          alignItems: "center",
+          gap: "6px 18px",
           boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
         }}
       >
-        {words.map((w, i) => (
-          <span
-            key={i}
-            style={{
-              fontFamily: font,
-              fontWeight: 800,
-              fontSize: 64,
-              lineHeight: 1.15,
-              color: i <= litCount ? highlight : color,
-              textShadow: "0 2px 6px rgba(0,0,0,0.5)",
-              transition: "none",
-            }}
-          >
-            {w}
-          </span>
-        ))}
+        {revealed.map((word, i) => {
+          const pop = spring({
+            frame: frame - Math.round(word.start * fps),
+            fps,
+            config: { damping: 200, mass: 0.4, stiffness: 160 },
+          });
+          const scale = interpolate(pop, [0, 1], [0.6, 1]);
+          const opacity = interpolate(pop, [0, 1], [0, 1]);
+          const isCurrent = i === currentIdx;
+          return (
+            <span
+              key={i}
+              style={{
+                display: "inline-block",
+                transform: `scale(${isCurrent ? scale : 1})`,
+                opacity,
+                fontFamily: CAPTION_FONT,
+                fontWeight: 400,
+                fontSize: 84,
+                letterSpacing: 1,
+                lineHeight: 1.05,
+                color: isCurrent ? highlight : color,
+                textShadow: "0 3px 8px rgba(0,0,0,0.55)",
+              }}
+            >
+              {uppercase ? word.w.toUpperCase() : word.w}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

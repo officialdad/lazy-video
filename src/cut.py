@@ -59,8 +59,15 @@ def remap_captions(captions: list[dict], seg_start: float, cuts: list[dict]) -> 
     for cap in captions:
         s = remap_time(cap["start"], seg_start, cuts)
         e = remap_time(cap["end"], seg_start, cuts)
-        if e - s > 0.05:
-            out.append({"start": s, "end": e, "text": cap["text"]})
+        if e - s <= 0.05:
+            continue
+        words = []
+        for w in cap.get("words", []):
+            ws = remap_time(w["start"], seg_start, cuts)
+            we = remap_time(w["end"], seg_start, cuts)
+            if we >= ws:
+                words.append({"w": w["w"], "start": ws, "end": we})
+        out.append({"start": s, "end": e, "text": cap["text"], "words": words})
     return out
 
 
@@ -124,6 +131,9 @@ def run(video: Path, cfg: dict | None = None) -> list[dict]:
 
     clips_dir = out_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
+    # clear stale clips so output reflects the CURRENT edl (segment count can change)
+    for old in [*clips_dir.glob("*.mp4"), *clips_dir.glob("*.captions.json")]:
+        old.unlink()
 
     results = [cut_segment(video, seg, clips_dir, cfg) for seg in edl["segments"]]
     print(f"[cut] {len(results)} clips -> {clips_dir}")

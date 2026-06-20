@@ -73,13 +73,20 @@ inspecting its JSON/media output (per the incremental build order in the spec).
 `config.json` at the repo root is the single source of all tunables; `src/config.py`
 loads it and provides path/slug helpers. Do not hardcode any of these — read from config.
 
-Key knobs: `marker_phrases` (lesson boundaries -> one reel each), `flub_word` (re-take
-trigger), `silence_threshold_sec`, `default_intensity` (`gentle`|`medium`|`hype` retention
-motion), `whisper_model`/`whisper_device` (cuda with cpu fallback), `output.*` (render
-res/fps/codec), `brand.*` (caption style, intro/outro assets, progress bar).
+Key knobs: `marker_phrases` (lesson boundaries -> one reel each), `marker_keep_in_segment`
+(keep the marker phrase as the reel's spoken lead-out), `flub_word` (re-take trigger),
+`silence_threshold_sec`, `default_intensity` (`gentle`|`medium`|`hype` retention motion),
+`whisper_model`/`whisper_device` (cuda with cpu fallback), `output.*` (render res/fps/codec),
+`brand.*` (caption font/uppercase/color/position, intro asset, progress bar, `cta`).
 
-Current locked values: marker `"langkah seterusnya"`, flub `"redo"`, large-v3 on cuda
-(RTX 3090), 1080x1920 H.264 30fps.
+Current locked values: marker `"langkah seterusnya adalah"` (boundary = end of the phrase),
+flub `"redo"`, large-v3 on cuda (RTX 3090), 1080x1920 H.264 30fps. Captions: **Anton, bold,
+ALL CAPS**, karaoke word-by-word reveal driven by per-word timestamps. Every reel ends with
+a **swipe-left CTA card** (`brand.cta`) that REPLACES the outro sting; `assets/outro.mp4` is
+unused. Timeline: `intro -> content -> swipe CTA`.
+
+The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
+`.claude/skills/` for Claude Code to auto-discover it — a root SKILL.md is not loaded).
 
 ## Environment notes
 

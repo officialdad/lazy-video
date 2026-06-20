@@ -4,7 +4,8 @@ import { Reel } from "./Reel";
 import { reelSchema, type ReelProps } from "./schema";
 
 const DEFAULT_BRAND = {
-  caption_font: "Inter",
+  caption_font: "Anton",
+  caption_uppercase: true,
   caption_position: "bottom-third",
   caption_color: "#ffffff",
   caption_highlight_color: "#ffd400",
@@ -15,16 +16,25 @@ const DEFAULT_BRAND = {
 
 // Preview defaults; the real values are injected per-render via --props.
 const DEFAULT_PROPS: ReelProps = {
-  clipSrc: "output/test/clips/01_rm80-boleh-buat-apa.mp4",
-  introSrc: "assets/intro.mp4",
-  outroSrc: "assets/outro.mp4",
+  clipSrc: "01_rm80-boleh-buat-apa.mp4",
+  introSrc: "intro.mp4",
   introDur: 2,
-  clipDur: 8,
-  outroDur: 2.5,
+  clipDur: 6,
   title: "RM80 Boleh Buat Apa?",
   intensity: "gentle",
   cutPointsSec: [0],
-  captions: [{ start: 0, end: 3, text: "Assalamualaikum semua" }],
+  captions: [
+    {
+      start: 0,
+      end: 3,
+      text: "Assalamualaikum semua",
+      words: [
+        { w: "Assalamualaikum", start: 0.2, end: 1.4 },
+        { w: "semua", start: 1.4, end: 2.2 },
+      ],
+    },
+  ],
+  cta: { text: "FOLLOW & STAY TUNED", durationSec: 1.6 },
   brand: DEFAULT_BRAND,
 };
 
@@ -40,9 +50,9 @@ export const RemotionRoot: React.FC = () => {
       fps={FPS}
       width={1080}
       height={1920}
-      durationInFrames={Math.round((2 + 8 + 2.5) * FPS)}
+      durationInFrames={Math.round((2 + 6 + 1.6) * FPS)}
       calculateMetadata={({ props }) => ({
-        durationInFrames: Math.round((props.introDur + props.clipDur + props.outroDur) * FPS),
+        durationInFrames: Math.round((props.introDur + props.clipDur + props.cta.durationSec) * FPS),
         fps: FPS,
         width: 1080,
         height: 1920,

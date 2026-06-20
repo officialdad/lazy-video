@@ -46,7 +46,7 @@ def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
 
 
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
-                intro_dur: float, outro_dur: float, out_dir: Path) -> Path:
+                intro_dur: float, out_dir: Path) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
     clip_path = cues_path.with_name(cues["clip"])
@@ -58,18 +58,18 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
 
     brand = dict(cfg["brand"])
     brand.setdefault("bg_color", "#0B132B")
+    cta = brand.get("cta", {"text": "FOLLOW & STAY TUNED", "duration_sec": 1.6})
 
     props = {
         "clipSrc": clip_path.name,        # basename; public dir = staging dir
         "introSrc": "intro.mp4",
-        "outroSrc": "outro.mp4",
         "introDur": intro_dur,
         "clipDur": cues["duration"],
-        "outroDur": outro_dur,
         "title": cues["title"],
         "intensity": cues["intensity"],
-        "captions": cues["captions"],
+        "captions": cues["captions"],     # each caption carries per-word timing
         "cutPointsSec": cut_points_sec(cues["keep_ranges"]),
+        "cta": {"text": cta["text"], "durationSec": cta.get("duration_sec", 1.6)},
         "brand": brand,
     }
     props_path = public_dir / f"{name}.props.json"
@@ -95,18 +95,19 @@ def run(video: Path, cfg: dict | None = None) -> list[Path]:
     if not cue_files:
         sys.exit(f"[render] no clip captions in {clips_dir} (run stage 3 first)")
 
+    # clear stale rendered reels so output matches the current clip set
+    for old in out_dir.glob("[0-9][0-9]_*.mp4"):
+        old.unlink()
+
     intro = ROOT / cfg["brand"]["intro_asset"]
-    outro = ROOT / cfg["brand"]["outro_asset"]
     intro_dur = ffprobe_duration(intro)
-    outro_dur = ffprobe_duration(outro)
 
     # small staging dir so Remotion isn't copying the whole repo (node_modules)
     public_dir = out_dir / "_render_public"
     public_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(intro, public_dir / "intro.mp4")
-    shutil.copy2(outro, public_dir / "outro.mp4")
     try:
-        outputs = [render_clip(cf, cfg, public_dir, intro_dur, outro_dur, out_dir)
+        outputs = [render_clip(cf, cfg, public_dir, intro_dur, out_dir)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)

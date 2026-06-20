@@ -54,9 +54,15 @@ def find_phrase_hits(words: list[dict], phrase: str) -> list[tuple[int, int]]:
     return hits
 
 
-def segment_by_markers(words: list[dict], marker_phrases: list[str]) -> list[dict]:
-    """Split words into segments at marker phrases; markers are excluded from content."""
-    # collect all marker spans, sorted
+def segment_by_markers(words: list[dict], marker_phrases: list[str],
+                       keep_in_segment: bool = False) -> list[dict]:
+    """Split words into segments at marker phrases.
+
+    keep_in_segment=False: marker phrase is dropped (old behavior).
+    keep_in_segment=True : marker phrase stays as the segment's spoken lead-out,
+                           so the boundary is the END of the phrase ("...adalah")
+                           and the next segment starts at the following word.
+    """
     spans: list[tuple[int, int]] = []
     for ph in marker_phrases:
         spans.extend(find_phrase_hits(words, ph))
@@ -66,13 +72,16 @@ def segment_by_markers(words: list[dict], marker_phrases: list[str]) -> list[dic
     cursor = 0
     bounds = spans + [(len(words), len(words))]  # sentinel tail
     for (m_start, m_end) in bounds:
-        content = words[cursor:m_start]
+        last = len(words) - 1 if m_start == len(words) else (m_end if keep_in_segment else m_start - 1)
+        content = words[cursor:last + 1]
         if content:
+            ends_on_marker = m_start != len(words)
             segments.append({
                 "word_start_idx": cursor,
-                "word_end_idx": m_start - 1,
+                "word_end_idx": last,
                 "start": content[0]["start"],
                 "end": content[-1]["end"],
+                "ends_on_marker": ends_on_marker,
             })
         cursor = m_end + 1
     return segments
@@ -113,13 +122,27 @@ def detect_silences(segs_text: list[dict], threshold: float, pad: float = 0.15) 
     return cuts
 
 
-def captions_in_range(segs_text: list[dict], start: float, end: float) -> list[dict]:
-    """Raw whisper captions whose midpoint falls within [start, end] (source time)."""
+def words_in_range(words: list[dict], start: float, end: float) -> list[dict]:
+    """Words whose midpoint falls within [start, end] (source time)."""
+    out = []
+    for w in words:
+        mid = (w["start"] + w["end"]) / 2
+        if start <= mid <= end:
+            out.append({"w": w["word"], "start": w["start"], "end": w["end"]})
+    return out
+
+
+def captions_in_range(segs_text: list[dict], words: list[dict],
+                      start: float, end: float) -> list[dict]:
+    """Whisper captions whose midpoint falls within [start, end], each carrying the
+    per-word timings (source time) that drive the karaoke reveal."""
     out = []
     for s in segs_text:
         mid = (s["start"] + s["end"]) / 2
         if start <= mid <= end:
-            out.append({"start": s["start"], "end": s["end"], "text": s["text"]})
+            ws = words_in_range(words, s["start"], s["end"])
+            out.append({"start": s["start"], "end": s["end"],
+                        "text": s["text"], "words": ws})
     return out
 
 
@@ -129,16 +152,18 @@ def build_draft(transcript: dict, cfg: dict) -> dict:
     if not words:
         sys.exit("[edl] transcript has no words")
 
-    marker_segments = segment_by_markers(words, cfg["marker_phrases"])
+    marker_segments = segment_by_markers(
+        words, cfg["marker_phrases"], cfg.get("marker_keep_in_segment", False))
     flub_cuts = detect_flubs(words, segs_text, cfg["flub_word"])
     silence_cuts = detect_silences(segs_text, cfg["silence_threshold_sec"])
     all_cuts = sorted(flub_cuts + silence_cuts, key=lambda c: c["start"])
 
+    # every reel ends with the swipe-left CTA card (it replaces the outro sting)
     segments_out: list[dict] = []
     for idx, seg in enumerate(marker_segments, start=1):
         s, e = seg["start"], seg["end"]
         seg_cuts = [c for c in all_cuts if c["start"] >= s and c["end"] <= e]
-        caps = captions_in_range(segs_text, s, e)
+        caps = captions_in_range(segs_text, words, s, e)
         first_text = caps[0]["text"] if caps else f"segment-{idx}"
         segments_out.append({
             "index": idx,
@@ -147,7 +172,8 @@ def build_draft(transcript: dict, cfg: dict) -> dict:
             "start": round(s, 3),
             "end": round(e, 3),
             "cuts_to_remove": seg_cuts,
-            "captions": caps,                # raw; LLM cleans text in place
+            "end_transition": "swipe_cta",
+            "captions": caps,                # text + per-word timing; LLM cleans text
             "intensity": cfg["default_intensity"],
         })
 

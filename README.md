@@ -42,26 +42,31 @@ All tunables live in `config.json`. Key knobs:
 
 | Key | Meaning |
 |-----|---------|
-| `marker_phrases` | spoken phrases that split lessons (one reel per segment) |
+| `marker_phrases` | spoken phrases that split lessons (`"langkah seterusnya adalah"`); boundary = end of phrase |
+| `marker_keep_in_segment` | keep the marker phrase as the reel's spoken lead-out |
 | `flub_word` | spoken re-take trigger; flub sentence is cut, clean take kept |
 | `silence_threshold_sec` | gaps longer than this are trimmed (never mid-sentence) |
 | `default_intensity` | `gentle` \| `medium` \| `hype` retention motion |
 | `whisper_model` / `whisper_device` | transcription model + cuda/cpu |
 | `output.*` | render resolution / fps / codec |
-| `brand.*` | caption font/color/position, intro+outro assets, progress bar |
+| `brand.*` | caption font (Anton) / uppercase / color / position, intro asset, progress bar, `cta` |
 
-Per-episode you can override `intensity` on individual segments in the EDL.
+Captions are **Anton, bold, ALL CAPS** with karaoke word-by-word reveal. Every reel ends
+with a **swipe-left CTA card** (`brand.cta`) instead of an outro sting. Per-episode you can
+override `intensity` on individual segments in the EDL.
 
 ## Drop-and-go
 
-See [SKILL.md](SKILL.md) — drop a video, say "edit this", approve the EDL, get reels.
+See [the skill](.claude/skills/edit-tutorial-reels/SKILL.md) — drop a video, say "edit
+this", approve the EDL, get reels. (It lives under `.claude/skills/` so Claude Code
+auto-discovers it.)
 
 ## Repo layout
 
 ```
 src/        python pipeline (transcribe, edl, cut)
 remotion/   remotion renderer (templates, motion, captions)
-assets/     intro.mp4, outro.mp4, fonts  (placeholders included)
+assets/     intro.mp4 (placeholder); outro.mp4 unused (CTA card replaces it)
 input/      drop videos here
 output/     finished reels per video
 config.json single source of tunables
