@@ -112,6 +112,12 @@ hardcode — read from config.
 The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
 `.claude/skills/` to be auto-discovered).
 
+**EDL contract is enforced mechanically**: `src/validate_edl.py` checks every approved
+`edl.json` (stage final, kebab slug, cuts sorted/in-span, non-empty karaoke `words`,
+`text` == joined words). It runs as a PostToolUse hook (`.claude/settings.json`) the
+moment an `edl.json` is written, and again in `cut.py` before cutting — script-written
+EDLs are gated too. Exit 2 feeds the errors back; fix the EDL, don't bypass the check.
+
 ## Environment notes
 
 - faster-whisper on CUDA needs the `nvidia-cudnn-cu12`/`nvidia-cublas-cu12` wheel DLLs on

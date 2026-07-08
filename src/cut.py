@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 from .config import load_config, output_dir_for
+from .validate_edl import validate
 
 
 def keep_ranges(start: float, end: float, cuts: list[dict]) -> list[tuple[float, float]]:
@@ -126,8 +127,9 @@ def run(video: Path, cfg: dict | None = None) -> list[dict]:
     if not edl_path.exists():
         sys.exit(f"[cut] approved edl.json not found: {edl_path} (run stage 2 first)")
     edl = json.loads(edl_path.read_text(encoding="utf-8"))
-    if edl.get("stage") != "final":
-        print("[cut] WARNING: edl.json is not marked 'final' (not LLM-approved?)")
+    errs = validate(edl)
+    if errs:
+        sys.exit("[cut] edl.json failed validation:\n" + "\n".join(f"  - {e}" for e in errs))
 
     clips_dir = out_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)

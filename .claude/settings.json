@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run python -m src.validate_edl --hook",
+            "timeout": 30,
+            "statusMessage": "Validating edl.json contract"
+          }
+        ]
+      }
+    ]
+  }
+}
