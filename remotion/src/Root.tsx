@@ -37,6 +37,9 @@ const DEFAULT_PROPS: ReelProps = {
   ],
   cta: { text: "FOLLOW & STAY TUNED", durationSec: 1.6 },
   brand: DEFAULT_BRAND,
+  bgMusic: "",
+  bgMusicVolume: 0.15,
+  coverBg: true,
 };
 
 const FPS = 30;

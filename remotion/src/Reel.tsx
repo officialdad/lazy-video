@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AbsoluteFill,
+  Audio,
   OffthreadVideo,
   Sequence,
   interpolate,
@@ -9,6 +10,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { mdiGestureSwipeLeft } from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
@@ -32,20 +34,23 @@ const ContentClip: React.FC<ReelProps> = (props) => {
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.brand.bg_color }}>
-      {/* blurred cover background */}
-      <AbsoluteFill>
-        <OffthreadVideo
-          src={src(props.clipSrc)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            filter: "blur(36px) brightness(0.45)",
-            transform: "scale(1.15)",
-          }}
-          muted
-        />
-      </AbsoluteFill>
+      {/* blurred cover background -- only when the clip doesn't fill the 9:16 frame
+          (a matched-aspect clip fully covers it, so this would just be a wasted decode) */}
+      {props.coverBg ? (
+        <AbsoluteFill>
+          <OffthreadVideo
+            src={src(props.clipSrc)}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: "blur(36px) brightness(0.45)",
+              transform: "scale(1.15)",
+            }}
+            muted
+          />
+        </AbsoluteFill>
+      ) : null}
 
       {/* sharp contained foreground with drift + punch-in */}
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
@@ -111,7 +116,14 @@ const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, 
   return (
     <AbsoluteFill style={{ transform: `translateX(${x}px)`, backgroundColor: brand.bg_color }}>
       <AbsoluteFill style={{ justifyContent: "center", alignItems: "center", flexDirection: "column", gap: 28 }}>
-        <div style={{ fontSize: 120, transform: `scale(${interpolate(arrowPop, [0, 1], [0.4, 1])})` }}>👉</div>
+        <svg
+          viewBox="0 0 24 24"
+          width={150}
+          height={150}
+          style={{ transform: `scale(${interpolate(arrowPop, [0, 1], [0.4, 1])})` }}
+        >
+          <path d={mdiGestureSwipeLeft} fill={brand.caption_highlight_color} />
+        </svg>
         <div
           style={{
             fontFamily: CAPTION_FONT,
@@ -134,13 +146,29 @@ const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, 
 };
 
 export const Reel: React.FC<ReelProps> = (props) => {
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const introF = Math.round(props.introDur * fps);
   const clipF = Math.round(props.clipDur * fps);
   const ctaF = Math.round(props.cta.durationSec * fps);
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.brand.bg_color }}>
+      {/* background music under the whole reel, fading in/out */}
+      {props.bgMusic ? (
+        <Audio
+          src={src(props.bgMusic)}
+          loop
+          volume={(f) =>
+            interpolate(
+              f,
+              [0, 12, durationInFrames - 18, durationInFrames],
+              [0, props.bgMusicVolume, props.bgMusicVolume, 0],
+              { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+            )
+          }
+        />
+      ) : null}
+
       {introF > 0 && props.introSrc ? (
         <Sequence durationInFrames={introF}>
           <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>

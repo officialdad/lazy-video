@@ -35,6 +35,16 @@ def ffprobe_duration(path: Path) -> float:
     return float(out.stdout.strip())
 
 
+def ffprobe_dims(path: Path) -> tuple[int, int]:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
+        check=True, capture_output=True, text=True,
+    )
+    w, h = out.stdout.strip().split("x")[:2]
+    return int(w), int(h)
+
+
 def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
     """Clip-local times where shots join (punch-in points), plus 0 for the opening."""
     points = [0.0]
@@ -46,7 +56,9 @@ def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
 
 
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
-                intro_src: str, intro_dur: float, out_dir: Path) -> Path:
+                intro_src: str, intro_dur: float, out_dir: Path,
+                bg_music_src: str = "", bg_music_vol: float = 0.0,
+                extra_flags: list[str] | None = None) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
     clip_path = cues_path.with_name(cues["clip"])
@@ -55,6 +67,12 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
 
     # stage the clip into the (small) public dir so staticFile() can reach it
     shutil.copy2(clip_path, public_dir / clip_path.name)
+
+    # blurred cover bg is only needed when the clip aspect != output aspect
+    # (a matched-aspect clip fills the frame, so skipping it saves a decode/frame)
+    cw, ch = ffprobe_dims(clip_path)
+    out_ar = cfg["output"]["width"] / cfg["output"]["height"]
+    cover_bg = abs(cw / ch - out_ar) > 0.01
 
     brand = dict(cfg["brand"])
     brand.setdefault("bg_color", "#0B132B")
@@ -71,6 +89,9 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
         "cutPointsSec": cut_points_sec(cues["keep_ranges"]),
         "cta": {"text": cta["text"], "durationSec": cta.get("duration_sec", 1.6)},
         "brand": brand,
+        "bgMusic": bg_music_src,
+        "bgMusicVolume": bg_music_vol,
+        "coverBg": cover_bg,
     }
     props_path = public_dir / f"{name}.props.json"
     props_path.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
@@ -78,7 +99,8 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
     print(f"[render] {name}  ({cues['duration']}s content) -> {out_path.name}")
     subprocess.run(
         ["npx", "remotion", "render", "Reel", str(out_path.resolve()),
-         f"--props={props_path.resolve()}", f"--public-dir={public_dir.resolve()}"],
+         f"--props={props_path.resolve()}", f"--public-dir={public_dir.resolve()}",
+         *(extra_flags or [])],
         check=True, cwd=ROOT / "remotion", shell=(sys.platform == "win32"),
     )
     return out_path
@@ -87,8 +109,33 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
 cfg_t = dict  # alias for readability
 
 
-def run(video: Path, cfg: dict | None = None) -> list[Path]:
+def run(video: Path, cfg: dict | None = None, *,
+        draft: bool = False, concurrency: int | None = None,
+        frames: str | None = None, gl: str | None = None,
+        hwaccel: str = "disable", binaries_dir: str | None = None) -> list[Path]:
     cfg = cfg or load_config()
+
+    # speed flags for iterative editing (final render passes none of these)
+    extra_flags: list[str] = []
+    if draft:
+        extra_flags.append("--scale=0.5")      # 1/4 the pixels -> ~3-4x faster preview
+    if concurrency:
+        extra_flags.append(f"--concurrency={concurrency}")
+    if frames:
+        extra_flags.append(f"--frames={frames}")  # e.g. "0-90" to preview just the opening
+    if gl:
+        extra_flags.append(f"--gl={gl}")          # "angle" = GPU-accelerate the blur
+    if hwaccel and hwaccel != "disable":
+        # NVENC (Windows/Linux) or VideoToolbox (macOS) encode; falls back to CPU
+        # with "if-possible". Only speeds the encode stage, not the frame decode.
+        extra_flags.append(f"--hardware-acceleration={hwaccel}")
+    # Windows: Remotion's bundled ffmpeg lacks NVENC -- point it at an external
+    # nvenc-capable ffmpeg (dir must hold ffmpeg.exe + ffprobe.exe) for hw encode.
+    binaries_dir = binaries_dir or cfg.get("render_binaries_dir") or None
+    if binaries_dir and hwaccel not in (None, "disable"):
+        extra_flags.append(f"--binaries-directory={binaries_dir}")
+    if extra_flags:
+        print(f"[render] speed flags: {' '.join(extra_flags)}")
     out_dir = output_dir_for(video)
     clips_dir = out_dir / "clips"
     cue_files = sorted(clips_dir.glob("*.captions.json"))
@@ -111,8 +158,18 @@ def run(video: Path, cfg: dict | None = None) -> list[Path]:
     else:
         intro_src, intro_dur = "", 0.0
 
+    # stage optional background music into the public dir (referenced by basename)
+    bg_music = cfg["brand"].get("bg_music", "")
+    if bg_music:
+        bgm_ext = Path(bg_music).suffix or ".mp3"
+        shutil.copy2(ROOT / bg_music, public_dir / f"bgm{bgm_ext}")
+        bg_src, bg_vol = f"bgm{bgm_ext}", cfg["brand"].get("bg_music_volume", 0.15)
+    else:
+        bg_src, bg_vol = "", 0.0
+
     try:
-        outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir)
+        outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir,
+                               bg_src, bg_vol, extra_flags)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)
@@ -123,8 +180,23 @@ def run(video: Path, cfg: dict | None = None) -> list[Path]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage 4 - render branded reels")
     ap.add_argument("video", type=Path, help="input video")
+    ap.add_argument("--draft", action="store_true",
+                    help="half-scale preview (~3-4x faster); re-run without for final")
+    ap.add_argument("--concurrency", type=int, default=None,
+                    help="parallel render threads (default ~half your cores)")
+    ap.add_argument("--frames", default=None,
+                    help="render only a frame range, e.g. 0-90 for the first 3s at 30fps")
+    ap.add_argument("--gl", default=None,
+                    help="GL backend; 'angle' GPU-accelerates the blur")
+    ap.add_argument("--hwaccel", default="disable",
+                    choices=["disable", "if-possible", "required"],
+                    help="hardware (NVENC) encode; needs --binaries-directory on Windows")
+    ap.add_argument("--binaries-directory", dest="binaries_dir", default=None,
+                    help="dir with an ffmpeg that has BOTH h264_nvenc AND libfdk_aac (Windows NVENC)")
     args = ap.parse_args()
-    run(args.video)
+    run(args.video, draft=args.draft, concurrency=args.concurrency,
+        frames=args.frames, gl=args.gl, hwaccel=args.hwaccel,
+        binaries_dir=args.binaries_dir)
 
 
 if __name__ == "__main__":

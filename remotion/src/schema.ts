@@ -41,6 +41,9 @@ export const reelSchema = z.object({
   cutPointsSec: z.array(z.number()),
   cta: ctaSchema,
   brand: brandSchema,
+  bgMusic: z.string().default(""),
+  bgMusicVolume: z.number().default(0.15),
+  coverBg: z.boolean().default(true),
 });
 
 export type ReelProps = z.infer<typeof reelSchema>;

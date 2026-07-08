@@ -68,7 +68,8 @@ export const Captions: React.FC<Props> = ({ captions, color, highlight, bg, posi
   }
   words = words.slice(0, currentIdx + 1); // build-up: only revealed words in this line
 
-  const bottom = position === "bottom-third" ? "26%" : "8%";
+  // accept a raw "NN%" for exact placement; else named presets
+  const bottom = position.endsWith("%") ? position : position === "bottom-third" ? "26%" : "8%";
 
   return (
     <div

@@ -11,6 +11,7 @@ venv/
 # Node / Remotion
 node_modules/
 remotion/out/
+remotion/build/
 .cache/
 
 # Pipeline artifacts

@@ -1,21 +1,30 @@
 ---
 name: edit-tutorial-reels
-description: Use when the user drops a portrait tutorial recording into input/ and says "edit this" (or "buat reels", "potong video ni"). Turns ONE long 9:16 screen-recording into a folder of branded vertical reels, one per micro-lesson, with no manual editing. Mixed Bahasa Malaysia + English.
+description: Use when the user drops ANY video into input/ and says "edit this" (or "buat reels", "potong video ni"). Turns one dropped recording into branded vertical reels — one per micro-lesson for a marker-split tutorial, or a single reel for a promo/clip — with no manual editing. Claude crops non-9:16 input to portrait first. Mixed Bahasa Malaysia + English.
 ---
 
 # Edit Tutorial Reels
 
-Turn one long portrait recording into branded vertical reels. The user records a 9:16
-tutorial (screen + webcam, mixed BM/English), drops it in `input/`, and says **"edit
-this"**. You drive the 4-stage pipeline and hand back finished reels in
-`output/<video-name>/`.
+Turn one dropped video into branded vertical reels. The working model is **drop any video,
+Claude edits it**: the user drops a recording in `input/`, says **"edit this"**, and you
+drive the pipeline and hand back finished reels in `output/<video-name>/`. It doesn't have
+to be a 9:16 tutorial — if the video is any other aspect ratio, you crop it to portrait
+first (Stage 0 below).
 
-The intelligence is YOU reading the transcript (Stage 2). Remotion only renders.
+The intelligence is YOU: cropping to the right frame (Stage 0) and reading the transcript
+(Stage 2). Remotion only renders.
 
 ## Trigger
 
-User drops `input/<something>.mp4` (or `.mov`) and says any of: "edit this", "buat
-reels", "potong jadi reels", "edit video ni".
+User drops `input/<something>.mp4` (or `.mov`, any aspect ratio) and says any of: "edit
+this", "buat reels", "potong jadi reels", "edit video ni".
+
+## Two input shapes
+
+- **Multi-lesson tutorial** — the creator speaks the marker phrase between lessons → one
+  reel per lesson.
+- **Single clip** (promo, announcement, anything with no marker phrase) → ONE reel. A
+  1-segment EDL is normal here, not a bug.
 
 ## The one thing that makes this work
 
@@ -25,6 +34,22 @@ it into the approved `edl.json`. A pure-code pass cannot fix code-switched capti
 write hooks — that needs reading. Do not skip your pass.
 
 ## Steps
+
+0. **Normalize to 9:16 (only if the input isn't already portrait).** Probe it first:
+   ```bash
+   ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=noprint_wrappers=1 input/<video>.mp4
+   ```
+   If it's not 9:16, crop to portrait with HandBrakeCLI, choosing the crop window from where
+   the content actually sits (ask the user if it's unclear — centered, off to a side, webcam
+   corner). Target width for a 9:16 out of a `H`-tall source is `H * 9 / 16`, centered.
+   Keep the audio (transcription needs it). Example — 3440x1440 ultrawide, centered content:
+   ```bash
+   HandBrakeCLI -i input/<video>.mp4 -o cropped.mp4 --crop 0:0:1315:1315 \
+     --non-anamorphic --encoder x264 --quality 20 --rate 30 --pfr --aencoder av_aac
+   ```
+   (`--crop top:bottom:left:right`; `(3440-810)/2 = 1315` per side → 810x1440.) Back up the
+   original, then put the cropped file at `input/<video>.mp4` so the rest of the pipeline
+   uses it. If the video is already 9:16, skip this step.
 
 1. **Transcribe + draft EDL.** Run:
    ```bash
@@ -46,8 +71,14 @@ write hooks — that needs reading. Do not skip your pass.
      word) — trim to the clean take by adjusting the segment `start` or adding a
      `cuts_to_remove` entry with `reason: "flub"`.
    - Write a short scroll-stopping `title` per segment and a kebab-case `filename_slug`.
-   - Sanity-check `cuts_to_remove`.
-   - When unsure of a mis-heard word, ASK the user rather than guessing.
+     (An empty `title` renders no title overlay — the reel starts cold on the content.)
+   - **Cut with restraint.** Remove only genuine fumbles (wrong-clicks, "oops",
+     lost-in-navigation), dead air, and jarring zoom-ins. KEEP the narrative browsing,
+     opening interactions (e.g. someone replying the creator), and content showcases — over-
+     cutting reads as "too fast / hard to follow." Align each `cuts_to_remove` span to
+     caption/word boundaries so audio doesn't chop mid-word.
+   - When unsure of a mis-heard word, ASK the user rather than guessing — the user is the
+     speaker and is the ground truth. Flag low-confidence whisper words (with timestamp).
 
 3. **Show the EDL and get approval.** Summarize segments, cuts, and any guesses (esp.
    mis-heard words). Wait for approval/corrections.
@@ -60,13 +91,42 @@ write hooks — that needs reading. Do not skip your pass.
 
 5. **Hand back** the reels in `output/<name>/`.
 
+## Iterate on the cut
+
+The user watches and asks for tweaks — this is expected, not failure. Common ones and where
+they live:
+
+- **Wording** (a caption doesn't match what they said) → edit the caption `text` AND its
+  `words` entries, keeping each word's timing; re-cut+render.
+- **Cut more / less** (keep a beat, drop a fumble or zoom) → adjust `cuts_to_remove` on
+  caption/word boundaries.
+- **Ending cut too early** → the trailing silence cut may be eating the tail; drop that
+  silence cut and/or leave a ~0.5–1s buffer after the last word.
+- **Caption too high/low** → `brand.caption_position` (see knobs).
+- **Music too loud/soft** → `brand.bg_music_volume` (see knobs).
+
+Most tweaks are a config or EDL edit plus a **render-only** re-run
+(`uv run python -m src.render input/<video>.mp4`) when the EDL is unchanged.
+**Before re-rendering, make sure no media player has the output reel open** (on Windows a
+player like MPC-HC locks the file and `render.py` fails with `WinError 32`); close it first.
+
+Speed up the re-render while iterating (the render cost is per-frame video decode):
+- `--draft` renders at half scale (~2x faster) — use it for pacing/wording/cut checks, then
+  re-run WITHOUT `--draft` for the final (draft overwrites the reel at half res).
+- `--frames A-B` renders only that frame range (e.g. `--frames 0-90` for the first 3s at
+  30fps) — perfect for checking one changed spot like the ending or CTA.
+- `--concurrency N` uses more cores (default is ~half). `--gl angle` barely helped here.
+
 ## How segments + transitions work
 
 - The user says the marker phrase **"langkah seterusnya adalah …"** between lessons. The
   boundary is the END of "adalah" (the phrase stays as the reel's spoken lead-out); the
   next reel starts at the next topic.
 - Every reel ends with a **swipe-left CTA card** ("FOLLOW & STAY TUNED") that REPLACES the
-  outro sting.
+  outro sting. Its icon is an MDI glyph (`mdiGestureSwipeLeft` from `@mdi/js`) rendered as
+  SVG in the highlight color — swap the import in `remotion/src/Reel.tsx` for a different one.
+- Optional background music plays under the whole reel (looped, fade in/out) when
+  `brand.bg_music` is set.
 - Reels start cold on the content (no intro sting by default — set `brand.show_intro: true`
   to prepend `assets/intro.mp4`).
 - Default reel timeline: `content (drift + punch-in + karaoke captions) -> swipe CTA`.
@@ -84,8 +144,14 @@ All tunables live in `config.json`. Read them; don't hardcode.
 - `whisper_model` / `whisper_device` — `large-v3` on `cuda` (cpu fallback).
 - `output.*` — render resolution / fps / codec (1080x1920 H.264 30fps).
 - `brand.*` — caption font (`Anton`), `caption_uppercase`, `caption_max_words` (words on
-  screen at once, default 4; lower to 3 for strictly one row), color/position, `show_intro`
+  screen at once, default 4; lower to 3 for strictly one row), color, `show_intro`
   (default false), intro asset, progress bar, and `cta` (text, swipe transition, duration).
+- `brand.caption_position` — a named preset (`bottom-third`) OR a raw `"NN%"` for the caption
+  box's bottom edge (percent of height; currently `"20%"`). Lower % = lower on screen; don't
+  go below ~20% or the platform's own UI covers it.
+- `brand.bg_music` / `brand.bg_music_volume` — optional background track under the reel
+  (looped, fade in/out), linear volume kept well under the voice (currently
+  `input/Le Freak - RAGE.mp3` at `0.075`). Empty `bg_music` = no music.
 
 ### Adjusting intensity per episode
 
