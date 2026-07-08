@@ -141,6 +141,9 @@ EDLs are gated too. Exit 2 feeds the errors back; fix the EDL, don't bypass the 
   ffmpeg is ever supplied; the gain would only be ~10s of encode anyway.
 - **Windows file lock:** a media player (e.g. MPC-HC) holding a rendered reel open makes
   `render.py` fail with `WinError 32`. Close the player before re-rendering.
+- **Hooks parse stdin JSON with Python, not jq** (e.g. `validate_edl --hook`) — uv/Python
+  is guaranteed on this machine, jq only since 2026-07 (winget `jqlang.jq`). Prefer Python
+  for repo hooks; jq is fine for throwaway shell use.
 - Windows: git warns LF->CRLF on commit; harmless.
 
 ## Working style for this repo
