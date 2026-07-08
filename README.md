@@ -1,76 +1,77 @@
 # lazy-video
 
-Local pipeline: one long portrait screen-recording → folder of polished, branded vertical
-reels. Zero manual editing.
+Drop any video into `input/`, tell Claude Code **"edit this"**, get branded 9:16 reels in
+`output/<name>/`. Zero manual editing.
 
-Record a 9:16 tutorial (screen + webcam, mixed Bahasa Malaysia + English) → drop it in
-`input/` → tell Claude Code **"edit this"** → finished reels land in `output/<name>/`.
+Built for portrait screen-recording tutorials (mixed Bahasa Malaysia + English, one reel
+per micro-lesson), but it takes any input: non-9:16 video gets cropped to portrait first,
+and a clip with no lesson markers becomes a single reel.
 
-The intelligence (where to cut, fixing captions, hook titles) is the LLM reading the
-transcript. Remotion is only the final renderer — it does NOT decide cuts.
+The intelligence (crop window, where to cut, fixing captions, hook titles) is the LLM.
+Remotion is only the renderer — it does not decide cuts.
 
-## Pipeline (4 stages, 1 command)
+## Pipeline
 
 ```
-python run.py input/my-video.mp4
-  ├─ Stage 1  transcribe   faster-whisper large-v3 (cuda)  -> transcript.json
-  ├─ Stage 2  EDL          mechanical draft + LLM clean     -> edl.json  [you approve]
-  ├─ Stage 3  cut          ffmpeg slice + remove flubs/silence -> clips/
-  └─ Stage 4  render       Remotion: motion + captions + intro/outro -> reels
+Stage 0   Claude crops non-9:16 input to portrait (HandBrakeCLI)   [only if needed]
+
+uv run python run.py input/my-video.mp4
+  ├─ 1 transcribe  faster-whisper large-v3 (cuda)       -> transcript.json
+  ├─ 2 EDL         mechanical draft + LLM final pass    -> edl.json  [you approve]
+  ├─ 3 cut         ffmpeg slice, remove flubs/silence   -> clips/
+  └─ 4 render      Remotion: motion + karaoke captions + swipe CTA -> reels
 ```
 
-Output: `output/<video-name>/NN_<slug>.mp4`, one branded reel per micro-lesson.
+Run once → pauses for EDL approval → run the same command again → finished reels
+(`output/<name>/NN_<slug>.mp4`).
 
 ## Requirements
 
-- **ffmpeg** on PATH (tested 8.0.1)
-- **Python 3.12** + [uv](https://docs.astral.sh/uv/) (deps in `pyproject.toml`)
-- **Node** (tested 24) + Remotion deps in `remotion/`
-- NVIDIA GPU for `whisper_device: cuda` (falls back to `cpu` in `config.json`)
+- **ffmpeg** + **HandBrakeCLI** on PATH
+- **Python 3.12** + [uv](https://docs.astral.sh/uv/)
+- **Node** + Remotion deps in `remotion/`
+- NVIDIA GPU for `whisper_device: cuda` (cpu fallback in `config.json`)
 
 ## Setup
 
 ```bash
-uv sync                       # python deps (faster-whisper + cuda libs)
-cd remotion && npm install    # remotion deps
-npx remotion browser ensure   # headless chrome for rendering
+uv sync                        # python deps (faster-whisper + cuda libs)
+cd remotion && npm install     # remotion deps
+npx remotion browser ensure    # headless chrome (one-time)
 ```
 
 ## Config
 
-All tunables live in `config.json`. Key knobs:
+All tunables live in `config.json`:
 
 | Key | Meaning |
 |-----|---------|
-| `marker_phrases` | spoken phrases that split lessons (`"langkah seterusnya adalah"`); boundary = end of phrase |
-| `marker_keep_in_segment` | keep the marker phrase as the reel's spoken lead-out |
-| `flub_word` | spoken re-take trigger; flub sentence is cut, clean take kept |
-| `silence_threshold_sec` | gaps longer than this are trimmed (never mid-sentence) |
+| `marker_phrases` | spoken lesson boundaries (`"langkah seterusnya adalah"`); boundary = end of phrase |
+| `flub_word` | spoken re-take trigger; flubbed take cut, clean take kept |
+| `silence_threshold_sec` | trim dead-air gaps longer than this |
 | `default_intensity` | `gentle` \| `medium` \| `hype` retention motion |
-| `whisper_model` / `whisper_device` | transcription model + cuda/cpu |
-| `output.*` | render resolution / fps / codec |
-| `brand.*` | caption font (Anton) / uppercase / color / position, intro asset, progress bar, `cta` |
+| `whisper_model` / `whisper_device` | large-v3, cuda/cpu |
+| `output.*` | 1080x1920 H.264 30fps |
+| `brand.*` | captions, CTA, intro, background music (below) |
 
-Captions are **Anton, bold, ALL CAPS** with karaoke word-by-word reveal. Reels start cold on
-the content (no intro sting by default — `brand.show_intro: false`) and end with a
-**swipe-left CTA card** (`brand.cta`) instead of an outro. Per-episode you can override
-`intensity` on individual segments in the EDL.
+Captions: **Anton, ALL CAPS**, karaoke word-by-word reveal, max 4 words on screen,
+positioned by `brand.caption_position` (raw `"NN%"` supported, currently `20%`). Reels
+start cold (no intro sting) and end on a **swipe-left CTA card** (MDI icon). Optional
+`brand.bg_music` plays looped under the voice at `brand.bg_music_volume`.
 
 ## Drop-and-go
 
-See [the skill](.claude/skills/edit-tutorial-reels/SKILL.md) — drop a video, say "edit
-this", approve the EDL, get reels. (It lives under `.claude/skills/` so Claude Code
-auto-discovers it.)
+See [the skill](.claude/skills/edit-tutorial-reels/SKILL.md): drop a video, say "edit
+this", approve the EDL, get reels.
 
 ## Repo layout
 
 ```
-src/        python pipeline (transcribe, edl, cut)
-remotion/   remotion renderer (templates, motion, captions)
-assets/     intro.mp4 (placeholder); outro.mp4 unused (CTA card replaces it)
+src/        python pipeline (transcribe, edl, cut, render)
+remotion/   renderer (Reel, Captions, motion)
+assets/     intro.mp4 placeholder (off by default)
 input/      drop videos here
 output/     finished reels per video
 config.json single source of tunables
-run.py      one command, all 4 stages
-SKILL.md    drop-and-go trigger doc
+run.py      one command, all stages
 ```
