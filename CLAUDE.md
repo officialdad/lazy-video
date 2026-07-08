@@ -162,13 +162,15 @@ The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
   `--frames A-B` (render one range), `--concurrency N` (default ~half the cores), `--gl angle`
   (GPU; negligible here). `npx remotion benchmark` finds the best concurrency for the machine.
 - **NVENC (GPU encode) is NOT enabled** and default `--hwaccel disable`. Remotion 4.0.486
-  supports NVENC on Windows, but only via an external ffmpeg passed with `--binaries-directory`
-  (its bundled ffmpeg has no `h264_nvenc`). The catch: that ffmpeg also needs `libfdk_aac`
-  (Remotion's audio path uses it), and common Windows nvenc builds (chocolatey/gyan) omit it —
-  so a merged dir fails on audio encode. A BtbN "nonfree" ffmpeg (nvenc + libfdk_aac) in a dir
-  alongside Remotion's `remotion.exe` would work: `--hwaccel required --binaries-directory <dir>`
-  (or set `render_binaries_dir` in config.json). Low ROI — NVENC only speeds the encode
-  (~10s), not the decode-bound frame render, so it's left off.
+  supports NVENC on Windows only via an external ffmpeg passed with `--binaries-directory`
+  (its bundled ffmpeg has no `h264_nvenc`). Dead end here: that external ffmpeg must ALSO have
+  `libfdk_aac` (Remotion 4.0.486 hard-codes it for audio preprocessing, no fallback to native
+  `aac`), and **no current prebuilt Windows ffmpeg ships both** — chocolatey/gyan and the BtbN
+  `gpl` builds have nvenc but not `libfdk_aac`, and BtbN no longer publishes a `nonfree`/fdk
+  build. Enabling NVENC would require compiling ffmpeg with `--enable-nvenc --enable-libfdk-aac
+  --enable-nonfree`. Not worth it: NVENC only speeds the encode (~10s), not the decode-bound
+  frame render. The `--hwaccel`/`--binaries-directory` flags on `src/render.py` remain as
+  opt-in plumbing if such an ffmpeg is ever supplied (dir must also hold Remotion's `remotion.exe`).
 - **Stage 0 crop** uses HandBrakeCLI (on PATH via WinGet); `ffprobe`/`ffmpeg` (chocolatey)
   are used for probing and cutting.
 - **Output file lock (Windows):** a media player holding a rendered reel open (e.g. MPC-HC)
