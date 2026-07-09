@@ -3,6 +3,10 @@
 Drop any video into `input/`, tell Claude Code **"edit this"**, get branded 9:16 reels in
 `output/<name>/`. Zero manual editing.
 
+> **New here?** Open Claude Code in this folder and say **"set me up"** — it detects your
+> OS, installs the tools (with your permission), and configures everything. Prefer to do it
+> by hand? See [Requirements](#requirements) + [Setup](#setup) below.
+
 Built for portrait screen-recording tutorials, but it takes any input: non-9:16 video gets
 cropped to portrait first, and a clip with no lesson markers becomes a single reel. Speech
 in any language works — the pipeline preserves code-switched / mixed-language captions
