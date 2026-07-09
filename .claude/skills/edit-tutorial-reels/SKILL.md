@@ -94,7 +94,8 @@ the output reel first** — on Windows it locks the file (`WinError 32`).
   "adalah" (phrase stays as the reel's spoken lead-out).
 - Every reel ends with a **swipe-left CTA card** (MDI icon via `@mdi/js` in
   `remotion/src/Reel.tsx`). Optional `brand.bg_music` loops under the reel.
-- Reels start cold (no intro; `brand.show_intro: true` prepends `assets/intro.mp4`).
+- Reels start cold (no intro; drop your own `assets/intro.mp4` and set
+  `brand.show_intro: true` to prepend it).
 - Timeline: `content (drift + punch-in + karaoke captions) -> swipe CTA`.
 - `intensity` is per-segment in the EDL: `gentle` (default) | `medium` | `hype`.
 
@@ -113,4 +114,3 @@ uv run python -m src.render     input/<video>.mp4   # Stage 4
 
 - First transcribe downloads large-v3 (~3GB) once.
 - A tiny last "stub" segment = recording cut mid-lesson — tell the user.
-- `assets/intro.mp4` is a placeholder; `assets/outro.mp4` unused (CTA card replaces it).

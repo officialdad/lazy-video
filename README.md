@@ -71,7 +71,7 @@ this", approve the EDL, get reels.
 ```
 src/        python pipeline (transcribe, edl, cut, render)
 remotion/   renderer (Reel, Captions, motion)
-assets/     caption font + intro placeholder
+assets/     caption font
 input/      drop videos here
 output/     finished reels per video
 config.json single source of tunables
