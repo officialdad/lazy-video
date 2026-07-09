@@ -11,10 +11,9 @@ A local pipeline: the user drops ANY video in `input/`, says "edit this", and ge
 - **Single clip** — promo/announcement with no marker → ONE reel (a 1-segment EDL is
   normal, not an error).
 
-Non-9:16 input is cropped to portrait first (Stage 0). Speech is mixed Bahasa Malaysia +
-English. The approved design lives in
-`docs/superpowers/specs/2026-06-20-ai-tutorial-reel-pipeline-design.md` — read it before
-architectural changes.
+Non-9:16 input is cropped to portrait first (Stage 0). Speech may be any language,
+including code-switched / mixed-language — the pipeline preserves it as spoken and never
+translates.
 
 ## The one architectural idea that matters
 
@@ -25,7 +24,7 @@ terms, or write hook titles — that requires reading. So:
 - `src/edl.py` does the **mechanical draft**: marker-phrase segmentation, flub-region
   detection, silence detection.
 - **Claude (in-session)** does the **final pass**: fix transcription errors, restore terms
-  (`cloud code` -> `Claude Code`), preserve the BM/English mix (never translate), write
+  (`cloud code` -> `Claude Code`), preserve the spoken language mix (never translate), write
   hook titles + filename slugs, sanity-check cut regions.
 - The user approves the final `edl.json` **before** any cutting happens.
 
@@ -92,22 +91,20 @@ No test suite. Validate by running a stage on a real clip and inspecting its out
 `config.json` is the single source of all tunables; `src/config.py` loads it. Never
 hardcode — read from config.
 
-- `marker_phrases` (`["langkah seterusnya adalah"]`, boundary = end of phrase),
+- `marker_phrases` (the phrase you say between lessons, boundary = end of phrase),
   `marker_keep_in_segment` (phrase stays as the reel's lead-out), `flub_word` (`"redo"`),
   `silence_threshold_sec`, `default_intensity` (`gentle`|`medium`|`hype`).
-- `whisper_model`/`whisper_device`: large-v3 on cuda (RTX 3090), cpu fallback.
+- `whisper_model`/`whisper_device`: e.g. large-v3 on cuda, cpu fallback.
 - `output.*`: 1080x1920 H.264 30fps.
 - Captions: **Anton, ALL CAPS**, karaoke word-by-word reveal from per-word timestamps,
   `brand.caption_max_words` (4) per line. `brand.caption_position` takes a preset
   (`bottom-third`) or raw `"NN%"` = caption box bottom edge (currently `"20%"`; don't go
   below ~20% — platform UI covers it).
 - Every reel ends with a **swipe-left CTA card** (`brand.cta`); its icon is an MDI SVG
-  (`mdiGestureSwipeLeft` from `@mdi/js` in `remotion/src/Reel.tsx`). `assets/outro.mp4`
-  unused. Intro sting off by default (`brand.show_intro: false`) — reels start cold.
-  Timeline: `content -> swipe CTA`.
-- `brand.bg_music` + `brand.bg_music_volume` (currently `input/Le Freak - RAGE.mp3` at
-  `0.075`): looped under the whole reel with fade in/out, kept well below the voice.
-  Empty = no music.
+  (`mdiGestureSwipeLeft` from `@mdi/js` in `remotion/src/Reel.tsx`). Intro sting off by
+  default (`brand.show_intro: false`) — reels start cold. Timeline: `content -> swipe CTA`.
+- `brand.bg_music` + `brand.bg_music_volume`: point at an audio file to loop it under the
+  whole reel with fade in/out, kept well below the voice. Empty = no music.
 
 The skill lives at `.claude/skills/edit-tutorial-reels/SKILL.md` (must be under
 `.claude/skills/` to be auto-discovered).
@@ -124,7 +121,7 @@ EDLs are gated too. Exit 2 feeds the errors back; fix the EDL, don't bypass the 
   the search path — `config.add_cuda_dll_dirs()` registers them before model load;
   `transcribe.py` falls back to cpu/int8. large-v3 (~3GB) downloads on first run.
 - Transcription uses `language=None` + `task="transcribe"` — never `translate` (preserves
-  the BM/English mix).
+  the spoken language mix).
 - EDL captions carry per-word timing (`words: [{w, start, end}]`); `cut.py` remaps cue and
   word times to clip-local; Remotion drives the karaoke reveal off them. The LLM final
   pass edits word text but must keep each word's timing.
@@ -134,17 +131,13 @@ EDLs are gated too. Exit 2 feeds the errors back; fix the EDL, don't bypass the 
 - **Render perf:** `render.py` skips the blurred cover-bg layer (`coverBg` prop) when the
   clip already fills the 9:16 frame — that hidden second decode was ~40% of render time.
   Iteration flags: `--draft`, `--frames A-B`, `--concurrency N` (default ~half the cores).
-  A ~90s reel renders in ~85s full / ~45s draft.
-- **NVENC (GPU encode) is off** (`--hwaccel disable` default): Remotion's bundled ffmpeg
-  lacks `h264_nvenc`, and no prebuilt Windows ffmpeg has both nvenc and the `libfdk_aac`
-  Remotion requires. Plumbing (`--hwaccel`, `--binaries-directory`) exists if a from-source
-  ffmpeg is ever supplied; the gain would only be ~10s of encode anyway.
-- **Windows file lock:** a media player (e.g. MPC-HC) holding a rendered reel open makes
-  `render.py` fail with `WinError 32`. Close the player before re-rendering.
-- **Hooks parse stdin JSON with Python, not jq** (e.g. `validate_edl --hook`) — uv/Python
-  is guaranteed on this machine, jq only since 2026-07 (winget `jqlang.jq`). Prefer Python
-  for repo hooks; jq is fine for throwaway shell use.
-- Windows: git warns LF->CRLF on commit; harmless.
+- **GPU encode (NVENC) is off** (`--hwaccel disable` default): Remotion's bundled ffmpeg
+  lacks `h264_nvenc`. The plumbing (`--hwaccel`, `--binaries-directory`) exists if you
+  supply a from-source ffmpeg; the gain is only ~10s of encode.
+- A media player holding a rendered reel open locks the file on Windows (`WinError 32`) —
+  close it before re-rendering.
+- **Hooks parse stdin JSON with Python, not jq** (e.g. `validate_edl --hook`) — Python is a
+  guaranteed dep here; jq may not be installed.
 
 ## Working style for this repo
 

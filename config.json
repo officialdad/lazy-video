@@ -26,7 +26,7 @@
     "show_intro": false,
     "intro_asset": "assets/intro.mp4",
     "outro_asset": "assets/outro.mp4",
-    "bg_music": "input/Le Freak - RAGE.mp3",
+    "bg_music": "",
     "bg_music_volume": 0.075,
     "show_progress_bar": true,
     "cta": {
