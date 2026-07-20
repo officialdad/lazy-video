@@ -42,6 +42,7 @@ const DEFAULT_PROPS: ReelProps = {
   brand: DEFAULT_BRAND,
   bgMusic: "",
   bgMusicVolume: 0.15,
+  bgMusicOffset: 0,
   coverBg: true,
 };
 

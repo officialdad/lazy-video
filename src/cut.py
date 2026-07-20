@@ -174,6 +174,12 @@ def cut_segment(video: Path, seg: dict, clips_dir: Path, cfg: dict) -> dict:
         "keep_ranges": clips,           # source-time (start, end, speed), for debugging
         "captions": captions,
         "overlays": overlays,
+        # per-segment render overrides; "" / None means "fall back to config.json"
+        "bg_music": seg.get("bg_music", ""),
+        "bg_music_offset": seg.get("bg_music_offset", 0.0),
+        "cta_duration_sec": seg.get("cta_duration_sec"),
+        "end_image": seg.get("end_image", ""),
+        "end_image_dur": seg.get("end_image_dur", 0.0),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"clip": str(clip_path), "duration": duration, "captions": len(captions)}
 

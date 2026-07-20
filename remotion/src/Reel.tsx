@@ -252,6 +252,7 @@ export const Reel: React.FC<ReelProps> = (props) => {
         <Audio
           src={src(props.bgMusic)}
           loop
+          trimBefore={Math.round(props.bgMusicOffset * fps)}
           volume={(f) =>
             interpolate(
               f,

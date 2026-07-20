@@ -23,6 +23,8 @@ import re
 import sys
 from pathlib import Path
 
+from .config import ROOT
+
 EPS = 0.05  # tolerance for float timing comparisons
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -73,6 +75,21 @@ def validate(edl: dict) -> list[str]:
             for c in cuts:
                 if zs < c["end"] - EPS and c["start"] < ze - EPS:
                     errs.append(f"{tag}: speedup {zs}-{ze} overlaps cut {c['start']}-{c['end']}")
+
+        # optional per-segment overrides: a music track, its start offset, the payoff
+        # photo and the CTA length. Assets are checked here because discovering a bad
+        # path during a render wastes the whole cut that preceded it.
+        for key in ("bg_music", "end_image"):
+            rel = seg.get(key)
+            if rel and not (ROOT / rel).exists():
+                errs.append(f"{tag}: {key} {rel!r} does not exist")
+        for key in ("end_image_dur", "cta_duration_sec"):
+            v = seg.get(key)
+            if v is not None and (not isinstance(v, (int, float)) or v <= 0):
+                errs.append(f"{tag}: {key} {v!r} must be a positive number")
+        off = seg.get("bg_music_offset")
+        if off is not None and (not isinstance(off, (int, float)) or off < 0):
+            errs.append(f"{tag}: bg_music_offset {off!r} must be >= 0")
 
         for cap in seg.get("captions") or []:
             ctag = f"{tag} caption {cap.get('start')}s {cap.get('text', '')[:30]!r}"

@@ -60,6 +60,8 @@ export const reelSchema = z.object({
   brand: brandSchema,
   bgMusic: z.string().default(""),
   bgMusicVolume: z.number().default(0.15),
+  /** Seconds to skip at the start of the music file (e.g. past a dead intro). */
+  bgMusicOffset: z.number().default(0),
   coverBg: z.boolean().default(true),
 });
 
