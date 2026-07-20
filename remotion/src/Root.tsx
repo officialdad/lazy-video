@@ -59,8 +59,10 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       durationInFrames={Math.round((0 + 6 + 1.6) * FPS)}
       calculateMetadata={({ props }) => ({
+        // Gate endImageDur on endImage presence to match Reel.tsx's endF calculation (line 246).
+        // Without this, a non-empty endImageDur but empty endImage would pad composition with phantom frames.
         durationInFrames: Math.round(
-          (props.introDur + props.clipDur + props.endImageDur + props.cta.durationSec) * FPS,
+          (props.introDur + props.clipDur + (props.endImage ? props.endImageDur : 0) + props.cta.durationSec) * FPS,
         ),
         fps: FPS,
         width: 1080,
