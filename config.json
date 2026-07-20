@@ -18,20 +18,27 @@
   "brand": {
     "caption_font": "Anton",
     "caption_uppercase": true,
-    "caption_max_words": 4,
+    "caption_max_words": 7,
+    "text_animation": "typewriter",
     "caption_position": "30%",
     "caption_color": "#ffffff",
     "caption_highlight_color": "#ffd400",
     "caption_bg": "rgba(0,0,0,0.55)",
     "show_intro": false,
     "intro_asset": "assets/intro.mp4",
-    "bg_music": "input/Le Freak - RAGE.mp3",
-    "bg_music_volume": 0.0403,
+    "intro_card": {
+      "image": "assets/minipc-palm.webp",
+      "logo": "",
+      "text": "PERNAH CUBA TAK MINI PC?",
+      "duration_sec": 2.0
+    },
+    "bg_music": "input/Potato Deal - Craig MacArthur.mp3",
+    "bg_music_volume": 0.7,
     "show_progress_bar": true,
     "cta": {
       "text": "FOLLOW & STAY TUNED",
       "transition": "swipe-left",
-      "duration_sec": 1.6
+      "duration_sec": 2.7
     }
   }
 }
