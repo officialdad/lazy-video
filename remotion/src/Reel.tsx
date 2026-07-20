@@ -29,18 +29,20 @@ import {
   mdiRobotOutline,
   mdiPartyPopper,
   mdiBookOpenPageVariant,
+  mdiHelpCircle,
+  mdiRocketLaunch,
 } from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
-import type { EndCard, Overlay, ReelProps } from "./schema";
+import type { EndCard, IntroCard as IntroCardData, Overlay, ReelProps } from "./schema";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
 
 /** Logical caption icon name (schema.ts captionSchema.icon) -> MDI path data.
     Keeps the EDL/schema free of @mdi/js internals -- a caption just names one
     of these, never a raw mdi* export.
-    ponytail: fixed icon set (14 entries) for the chapter-card use case; upgrade
+    ponytail: fixed icon set (16 entries) for the chapter-card use case; upgrade
     path if more are ever needed is to widen this map (or generate it from
     @mdi/js's exports), not to accept raw MDI names in the EDL. */
 export const CAPTION_ICONS: Record<string, string> = {
@@ -58,6 +60,8 @@ export const CAPTION_ICONS: Record<string, string> = {
   robot: mdiRobotOutline,
   party: mdiPartyPopper,
   book: mdiBookOpenPageVariant,
+  help: mdiHelpCircle,
+  rocket: mdiRocketLaunch,
 };
 
 /** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
@@ -419,6 +423,80 @@ const EndCardOverlay: React.FC<{
   );
 };
 
+/** Still-card intro: CachyOS logo + hook text on the brand background, shown in
+    the intro Sequence in place of the video sting when props.introCard is set
+    (see render.py's intro_card staging -- takes precedence over introSrc). The
+    logo lands first (spring scale + fade), the hook text follows a short
+    stagger later (fade + slide-up) so the question reads after the mark is
+    established. No exit animation -- the Sequence just ends into content. */
+const IntroCard: React.FC<{
+  card: IntroCardData;
+  brand: ReelProps["brand"];
+  durationInFrames: number;
+}> = ({ card, brand, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+
+  // logo settles within roughly the first third of the card's duration
+  const logoSpring = spring({ frame, fps, config: { damping: 200, mass: 0.5, stiffness: 140 } });
+  const logoScale = interpolate(logoSpring, [0, 1], [0.7, 1]);
+  const logoOpacity = interpolate(logoSpring, [0, 1], [0, 1]);
+
+  // hook text follows a short stagger after the logo, sized off the card's own
+  // duration (not a fixed frame count) so the pacing still works if duration_sec changes
+  const textDelayFrames = Math.round(durationInFrames * 0.22);
+  const textSpring = spring({
+    frame: frame - textDelayFrames,
+    fps,
+    config: { damping: 200, mass: 0.6, stiffness: 120 },
+  });
+  const textOpacity = interpolate(textSpring, [0, 1], [0, 1]);
+  const textY = interpolate(textSpring, [0, 1], [30, 0]);
+
+  const logoWidth = width * 0.42; // ~38-45% of frame width, per spec; height auto keeps aspect
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: brand.bg_color,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        paddingTop: height * 0.16, // upper-middle anchor for the logo
+      }}
+    >
+      <Img
+        src={src(card.logo)}
+        style={{
+          width: logoWidth,
+          height: "auto",
+          opacity: logoOpacity,
+          transform: `scale(${logoScale})`,
+        }}
+      />
+      <div
+        style={{
+          marginTop: 56,
+          opacity: textOpacity,
+          transform: `translateY(${textY}px)`,
+          fontFamily: CAPTION_FONT,
+          fontWeight: 900,
+          fontSize: 88,
+          letterSpacing: 1,
+          lineHeight: 1.1,
+          textAlign: "center",
+          maxWidth: "84%",
+          color: brand.caption_color,
+          textShadow: END_CARD_TEXT_SHADOW,
+        }}
+      >
+        {brand.caption_uppercase ? card.text.toUpperCase() : card.text}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const Reel: React.FC<ReelProps> = (props) => {
   const { fps, durationInFrames } = useVideoConfig();
   const introF = Math.round(props.introDur * fps);
@@ -445,11 +523,15 @@ export const Reel: React.FC<ReelProps> = (props) => {
         />
       ) : null}
 
-      {introF > 0 && props.introSrc ? (
-        <Sequence durationInFrames={introF}>
-          <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
-            <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </AbsoluteFill>
+      {introF > 0 && (props.introCard || props.introSrc) ? (
+        <Sequence from={0} durationInFrames={introF}>
+          {props.introCard ? (
+            <IntroCard card={props.introCard} brand={props.brand} durationInFrames={introF} />
+          ) : (
+            <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+              <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </AbsoluteFill>
+          )}
         </Sequence>
       ) : null}
 

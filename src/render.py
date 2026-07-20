@@ -83,7 +83,8 @@ def stage_asset(rel: str, public_dir: Path) -> str:
 
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
                 intro_src: str, intro_dur: float, out_dir: Path,
-                extra_flags: list[str] | None = None) -> Path:
+                extra_flags: list[str] | None = None,
+                intro_card_prop: dict | None = None) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
     clip_path = cues_path.with_name(cues["clip"])
@@ -115,6 +116,7 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
         "clipSrc": clip_path.name,        # basename; public dir = staging dir
         "introSrc": intro_src,            # "" when intro disabled (reel starts cold)
         "introDur": intro_dur,
+        "introCard": intro_card_prop,     # None = no card; takes precedence over introSrc in Reel.tsx
         "clipDur": cues["duration"],
         "title": cues["title"],
         "intensity": cues["intensity"],
@@ -188,17 +190,26 @@ def run(video: Path, cfg: dict | None = None, *,
     public_dir = out_dir / "_render_public"
     public_dir.mkdir(parents=True, exist_ok=True)
 
-    # intro is off by default -- reels start cold on content (the hook).
-    if cfg["brand"].get("show_intro", False):
+    # intro is off by default -- reels start cold on content (the hook). A still
+    # card (logo + hook text) takes precedence over the video sting when both
+    # are configured.
+    intro_card_cfg = cfg["brand"].get("intro_card")
+    if intro_card_cfg:
+        logo_basename = stage_asset(intro_card_cfg["logo"], public_dir)
+        intro_src, intro_dur = "", intro_card_cfg["duration_sec"]
+        intro_card_prop = {"logo": logo_basename, "text": intro_card_cfg["text"]}
+    elif cfg["brand"].get("show_intro", False):
         intro = ROOT / cfg["brand"]["intro_asset"]
         shutil.copy2(intro, public_dir / "intro.mp4")
         intro_src, intro_dur = "intro.mp4", ffprobe_duration(intro)
+        intro_card_prop = None
     else:
         intro_src, intro_dur = "", 0.0
+        intro_card_prop = None
 
     try:
         outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir,
-                               extra_flags)
+                               extra_flags, intro_card_prop=intro_card_prop)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)

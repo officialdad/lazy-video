@@ -20,6 +20,7 @@ const DEFAULT_PROPS: ReelProps = {
   clipSrc: "01_rm80-boleh-buat-apa.mp4",
   introSrc: "",
   introDur: 0,
+  introCard: null,
   clipDur: 6,
   title: "RM80 Boleh Buat Apa?",
   intensity: "gentle",

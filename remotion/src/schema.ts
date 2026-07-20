@@ -59,10 +59,19 @@ export const endCardSchema = z.object({
   })),
 });
 
+/** Still-card intro: logo + hook text, staged via stage_asset (basename only).
+    null = no card intro (falls back to the introSrc video path, if any). */
+export const introCardSchema = z.object({
+  logo: z.string(),   // staticFile basename in the render staging dir
+  text: z.string(),
+});
+
 export const reelSchema = z.object({
   clipSrc: z.string(),
   introSrc: z.string(),
   introDur: z.number(),
+  /** Card intro (logo + hook text); takes precedence over introSrc when set. */
+  introCard: introCardSchema.nullable().default(null),
   clipDur: z.number(),
   title: z.string(),
   intensity: z.enum(["gentle", "medium", "hype"]),
@@ -88,4 +97,5 @@ export type Caption = z.infer<typeof captionSchema>;
 export type Word = z.infer<typeof wordSchema>;
 export type Overlay = z.infer<typeof overlaySchema>;
 export type EndCard = z.infer<typeof endCardSchema>;
+export type IntroCard = z.infer<typeof introCardSchema>;
 export type Intensity = ReelProps["intensity"];
