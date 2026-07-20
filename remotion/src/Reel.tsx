@@ -39,9 +39,9 @@ const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
 /** Logical caption icon name (schema.ts captionSchema.icon) -> MDI path data.
     Keeps the EDL/schema free of @mdi/js internals -- a caption just names one
     of these, never a raw mdi* export.
-    ponytail: fixed 5-icon set for the chapter-card use case; upgrade path if
-    more are ever needed is to widen this map (or generate it from @mdi/js's
-    exports), not to accept raw MDI names in the EDL. */
+    ponytail: fixed icon set (13 entries) for the chapter-card use case; upgrade
+    path if more are ever needed is to widen this map (or generate it from
+    @mdi/js's exports), not to accept raw MDI names in the EDL. */
 export const CAPTION_ICONS: Record<string, string> = {
   package: mdiPackageVariantClosed,
   screwdriver: mdiScrewdriver,
@@ -334,7 +334,7 @@ const EndCardOverlay: React.FC<{ card: EndCard; brand: ReelProps["brand"]; iconM
           ) : null}
           <div
             style={{
-              fontFamily: brand.caption_font,
+              fontFamily: CAPTION_FONT,
               fontWeight: 400,
               fontSize: 62,
               letterSpacing: 1,
@@ -370,7 +370,7 @@ const EndCardOverlay: React.FC<{ card: EndCard; brand: ReelProps["brand"]; iconM
                 ) : null}
                 <div
                   style={{
-                    fontFamily: brand.caption_font,
+                    fontFamily: CAPTION_FONT,
                     fontWeight: 400,
                     fontSize: 50,
                     letterSpacing: 0.5,
