@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -65,11 +66,17 @@ def stage_asset(rel: str, public_dir: Path) -> str:
 
     Remotion resolves props through staticFile() against the staging dir, so the
     name must be filesystem- and URL-safe: 'Circuit Rush - The Mini Vandals.mp3'
-    becomes 'Circuit_Rush_-_The_Mini_Vandals.mp3'."""
+    becomes 'Circuit_Rush_-_The_Mini_Vandals.mp3'. The staged name is prefixed with
+    a short hash of the full repo-relative path (not just the basename), so two
+    different source paths can never collide in the shared staging dir even if
+    their basenames sanitize to the same string; the same rel staged twice always
+    resolves to the same file."""
     src_path = ROOT / rel
     if not src_path.exists():
         sys.exit(f"[render] missing asset: {rel}")
-    dest = public_dir / re.sub(r"[^A-Za-z0-9._-]", "_", Path(rel).name)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(rel).name)
+    digest = hashlib.sha1(rel.encode("utf-8")).hexdigest()[:8]
+    dest = public_dir / f"{digest}_{safe_name}"
     shutil.copy2(src_path, dest)
     return dest.name
 

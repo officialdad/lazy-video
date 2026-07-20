@@ -52,6 +52,11 @@ assert any("end_image_dur" in e for e in validate(edl(end_image_dur=-1.0)))
 assert any("cta_duration_sec" in e for e in validate(edl(cta_duration_sec=0)))
 assert any("bg_music_offset" in e for e in validate(edl(bg_music_offset=-2.0)))
 
+# a valid positive value passes -- without these, a validator that rejected
+# these keys unconditionally would still satisfy every assert above
+assert validate(edl(cta_duration_sec=2.0)) == []
+assert validate(edl(end_image_dur=1.5)) == []
+
 # a zero offset is legal (it is the default)
 assert validate(edl(bg_music_offset=0.0)) == []
 
