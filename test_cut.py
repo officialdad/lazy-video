@@ -7,7 +7,7 @@ by its speed, every caption after the fast-forward drifts out of sync. These ass
 fail loudly if that breaks.
 """
 
-from src.cut import keep_ranges, apply_speedups, remap_time, atempo_chain
+from src.cut import keep_ranges, apply_speedups, remap_time, atempo_chain, remap_captions
 
 
 def approx(a, b, eps=0.01):
@@ -55,5 +55,19 @@ for f in (3.0, 6.0, 8.0, 5.0):
     for stage in atempo_chain(f).split(","):
         v = float(stage.split("=")[1]); assert 0.5 <= v <= 2.0; prod *= v
     assert approx(prod, f), (f, prod)
+
+# --- remap_captions: the "icon" field (chapter-card icons) must survive the remap ---
+# no cuts/speedups -> identity timeline, so times below are unchanged
+identity_clips = apply_speedups([(0, 10)], [])
+caps_in = [
+    {"start": 0, "end": 3, "text": "BUKA CASING", "words": [{"w": "BUKA CASING", "start": 0, "end": 3}],
+     "icon": "screwdriver"},
+    {"start": 3, "end": 6, "text": "PASANG RAM", "words": [{"w": "PASANG RAM", "start": 3, "end": 6}]},
+]
+caps_out = remap_captions(caps_in, identity_clips)
+assert caps_out[0]["icon"] == "screwdriver", caps_out[0]
+# a caption with no icon still produces a valid dict, with icon defaulting to ""
+assert caps_out[1]["icon"] == "", caps_out[1]
+assert set(caps_out[1].keys()) == {"start", "end", "text", "words", "icon"}, caps_out[1]
 
 print("cut.py timeline math OK")

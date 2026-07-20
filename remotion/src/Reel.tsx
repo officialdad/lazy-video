@@ -11,13 +11,36 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { mdiArrowDownBold, mdiArrowUpBold, mdiGestureSwipeLeft } from "@mdi/js";
+import {
+  mdiArrowDownBold,
+  mdiArrowUpBold,
+  mdiGestureSwipeLeft,
+  mdiPackageVariantClosed,
+  mdiScrewdriver,
+  mdiMemory,
+  mdiHarddisk,
+  mdiController,
+} from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
 import type { Overlay, ReelProps } from "./schema";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
+
+/** Logical caption icon name (schema.ts captionSchema.icon) -> MDI path data.
+    Keeps the EDL/schema free of @mdi/js internals -- a caption just names one
+    of these, never a raw mdi* export.
+    ponytail: fixed 5-icon set for the chapter-card use case; upgrade path if
+    more are ever needed is to widen this map (or generate it from @mdi/js's
+    exports), not to accept raw MDI names in the EDL. */
+export const CAPTION_ICONS: Record<string, string> = {
+  package: mdiPackageVariantClosed,
+  screwdriver: mdiScrewdriver,
+  memory: mdiMemory,
+  harddisk: mdiHarddisk,
+  controller: mdiController,
+};
 
 /** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
 const ArrowOverlay: React.FC<{ o: Overlay; color: string }> = ({ o, color }) => {
@@ -146,6 +169,7 @@ const ContentClip: React.FC<ReelProps> = (props) => {
         position={props.brand.caption_position}
         uppercase={props.brand.caption_uppercase}
         maxWords={props.brand.caption_max_words}
+        iconMap={CAPTION_ICONS}
       />
 
       {/* attention overlays (arrows / highlight boxes) at clip-local times */}

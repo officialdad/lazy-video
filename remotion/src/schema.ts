@@ -11,6 +11,10 @@ export const captionSchema = z.object({
   end: z.number(),
   text: z.string(),
   words: z.array(wordSchema).default([]),
+  /** Logical icon name (e.g. "package", "memory") -> looked up in Reel.tsx's
+      CAPTION_ICONS map. "" = no icon. Kept as a short logical name, not an
+      @mdi/js export name, so the EDL/schema stay decoupled from that package. */
+  icon: z.string().default(""),
 });
 
 export const brandSchema = z.object({

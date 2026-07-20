@@ -107,7 +107,10 @@ def remap_captions(captions: list[dict],
             we = remap_time(w["end"], clips)
             if we >= ws:
                 words.append({"w": w["w"], "start": ws, "end": we})
-        out.append({"start": s, "end": e, "text": cap["text"], "words": words})
+        out.append({
+            "start": s, "end": e, "text": cap["text"], "words": words,
+            "icon": cap.get("icon", ""),
+        })
     return out
 
 

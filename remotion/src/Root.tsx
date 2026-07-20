@@ -33,6 +33,7 @@ const DEFAULT_PROPS: ReelProps = {
         { w: "Assalamualaikum", start: 0.2, end: 1.4 },
         { w: "semua", start: 1.4, end: 2.2 },
       ],
+      icon: "",
     },
   ],
   overlays: [],
