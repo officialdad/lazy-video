@@ -195,9 +195,12 @@ def run(video: Path, cfg: dict | None = None, *,
     # are configured.
     intro_card_cfg = cfg["brand"].get("intro_card")
     if intro_card_cfg:
-        logo_basename = stage_asset(intro_card_cfg["logo"], public_dir)
+        logo_rel = intro_card_cfg.get("logo") or ""
+        image_rel = intro_card_cfg.get("image") or ""
+        logo_basename = stage_asset(logo_rel, public_dir) if logo_rel else ""
+        image_basename = stage_asset(image_rel, public_dir) if image_rel else ""
         intro_src, intro_dur = "", intro_card_cfg["duration_sec"]
-        intro_card_prop = {"logo": logo_basename, "text": intro_card_cfg["text"]}
+        intro_card_prop = {"logo": logo_basename, "image": image_basename, "text": intro_card_cfg["text"]}
     elif cfg["brand"].get("show_intro", False):
         intro = ROOT / cfg["brand"]["intro_asset"]
         shutil.copy2(intro, public_dir / "intro.mp4")

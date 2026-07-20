@@ -423,76 +423,144 @@ const EndCardOverlay: React.FC<{
   );
 };
 
-/** Still-card intro: CachyOS logo + hook text on the brand background, shown in
-    the intro Sequence in place of the video sting when props.introCard is set
-    (see render.py's intro_card staging -- takes precedence over introSrc). The
-    logo lands first (spring scale + fade), the hook text follows a short
-    stagger later (fade + slide-up) so the question reads after the mark is
-    established. No exit animation -- the Sequence just ends into content. */
+// The hero photo bakes in its own dark red-to-black background; brand.bg_color
+// defaults to a navy (#0B132B) that visibly seams against it, so the card
+// letterboxes with a plain near-black instead -- ponytail: simplest fix that
+// blends with the image's edges without touching the shared brand palette.
+const INTRO_CARD_BG = "#0a0605";
+
+/** Split the hook text into (text, highlight) runs so the product term reads
+    as an accent. Looks for "MINI PC" verbatim (case-insensitive) first; if the
+    copy ever changes and that phrase isn't present, falls back to highlighting
+    the last two words -- ponytail: good enough to keep the accent robust to
+    exact wording without a full keyword-list config. */
+function splitHookText(text: string): { text: string; highlight: boolean }[] {
+  const idx = text.toUpperCase().indexOf("MINI PC");
+  if (idx !== -1) {
+    return [
+      { text: text.slice(0, idx), highlight: false },
+      { text: text.slice(idx, idx + "MINI PC".length), highlight: true },
+      { text: text.slice(idx + "MINI PC".length), highlight: false },
+    ].filter((seg) => seg.text.length > 0);
+  }
+  const words = text.split(" ");
+  if (words.length <= 2) {
+    return [{ text, highlight: true }];
+  }
+  return [
+    { text: words.slice(0, -2).join(" ") + " ", highlight: false },
+    { text: words.slice(-2).join(" "), highlight: true },
+  ];
+}
+
+/** Stylized product-hero intro: the hero photo (mini PC in a palm) fills the
+    upper two-thirds, ken-burns zooming in slowly, shown in the intro Sequence
+    in place of the video sting when props.introCard is set (see render.py's
+    intro_card staging -- takes precedence over introSrc). The hook text pops
+    up in the lower third a beat after the photo settles, over a dark scrim for
+    legibility, with its product term ("MINI PC") picked out in the brand
+    highlight colour and a wipe-in accent bar underneath. An optional small
+    logo chip can sit in a top corner; card.logo === "" renders nothing. No
+    exit animation -- the Sequence just ends into content. */
 const IntroCard: React.FC<{
   card: IntroCardData;
   brand: ReelProps["brand"];
   durationInFrames: number;
 }> = ({ card, brand, durationInFrames }) => {
   const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+  const { fps, width } = useVideoConfig();
 
-  // logo settles within roughly the first third of the card's duration
-  const logoSpring = spring({ frame, fps, config: { damping: 200, mass: 0.5, stiffness: 140 } });
-  const logoScale = interpolate(logoSpring, [0, 1], [0.7, 1]);
-  const logoOpacity = interpolate(logoSpring, [0, 1], [0, 1]);
+  // image fades in and starts its slow zoom right away
+  const imageSpring = spring({ frame, fps, config: { damping: 200, mass: 0.5, stiffness: 140 } });
+  const imageOpacity = interpolate(imageSpring, [0, 1], [0, 1]);
+  const imageZoom = interpolate(frame, [0, durationInFrames], [1.0, 1.06], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
-  // hook text follows a short stagger after the logo, sized off the card's own
+  // hook text follows a short stagger after the image, sized off the card's own
   // duration (not a fixed frame count) so the pacing still works if duration_sec changes
-  const textDelayFrames = Math.round(durationInFrames * 0.22);
+  const textDelayFrames = Math.round(durationInFrames * 0.28);
   const textSpring = spring({
     frame: frame - textDelayFrames,
     fps,
     config: { damping: 200, mass: 0.6, stiffness: 120 },
   });
   const textOpacity = interpolate(textSpring, [0, 1], [0, 1]);
-  const textY = interpolate(textSpring, [0, 1], [30, 0]);
+  const textY = interpolate(textSpring, [0, 1], [40, 0]);
 
-  const logoWidth = width * 0.42; // ~38-45% of frame width, per spec; height auto keeps aspect
+  // accent bar wipes in a beat after the text starts landing
+  const barDelayFrames = textDelayFrames + Math.round(fps * 0.15);
+  const barSpring = spring({
+    frame: frame - barDelayFrames,
+    fps,
+    config: { damping: 200, mass: 0.5, stiffness: 140 },
+  });
+  const barScale = interpolate(barSpring, [0, 1], [0, 1]);
+
+  const displayText = brand.caption_uppercase ? card.text.toUpperCase() : card.text;
+  const segments = splitHookText(displayText);
 
   return (
-    <AbsoluteFill
-      style={{
-        backgroundColor: brand.bg_color,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-start",
-        paddingTop: height * 0.16, // upper-middle anchor for the logo
-      }}
-    >
-      <Img
-        src={src(card.logo)}
-        style={{
-          width: logoWidth,
-          height: "auto",
-          opacity: logoOpacity,
-          transform: `scale(${logoScale})`,
-        }}
+    <AbsoluteFill style={{ backgroundColor: INTRO_CARD_BG }}>
+      {card.image ? (
+        <AbsoluteFill style={{ justifyContent: "flex-start", alignItems: "center", opacity: imageOpacity }}>
+          <Img
+            src={src(card.image)}
+            style={{
+              width: "100%",
+              height: "66%",
+              objectFit: "contain", // keep the whole palm shot + baked-in spec callouts visible, never cropped
+              transform: `scale(${imageZoom})`,
+            }}
+          />
+        </AbsoluteFill>
+      ) : null}
+
+      {/* dark gradient scrim behind the lower-third hook so it stays legible
+          regardless of what's behind it */}
+      <AbsoluteFill
+        style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.85) 100%)" }}
       />
-      <div
-        style={{
-          marginTop: 56,
-          opacity: textOpacity,
-          transform: `translateY(${textY}px)`,
-          fontFamily: CAPTION_FONT,
-          fontWeight: 900,
-          fontSize: 88,
-          letterSpacing: 1,
-          lineHeight: 1.1,
-          textAlign: "center",
-          maxWidth: "84%",
-          color: brand.caption_color,
-          textShadow: END_CARD_TEXT_SHADOW,
-        }}
-      >
-        {brand.caption_uppercase ? card.text.toUpperCase() : card.text}
-      </div>
+
+      {card.logo ? (
+        <div style={{ position: "absolute", top: 40, left: 40 }}>
+          <Img src={src(card.logo)} style={{ width: width * 0.14, height: "auto" }} />
+        </div>
+      ) : null}
+
+      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: "9%" }}>
+        <div
+          style={{
+            opacity: textOpacity,
+            transform: `translateY(${textY}px)`,
+            fontFamily: CAPTION_FONT,
+            fontWeight: 900,
+            fontSize: 92,
+            letterSpacing: 1,
+            lineHeight: 1.1,
+            textAlign: "center",
+            maxWidth: "86%",
+            textShadow: END_CARD_TEXT_SHADOW,
+          }}
+        >
+          {segments.map((seg, i) => (
+            <span key={i} style={{ color: seg.highlight ? brand.caption_highlight_color : brand.caption_color }}>
+              {seg.text}
+            </span>
+          ))}
+        </div>
+        <div
+          style={{
+            marginTop: 28,
+            width: 180,
+            height: 10,
+            borderRadius: 6,
+            background: brand.caption_highlight_color,
+            transform: `scaleX(${barScale})`,
+          }}
+        />
+      </AbsoluteFill>
     </AbsoluteFill>
   );
 };

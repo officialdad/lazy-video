@@ -59,10 +59,12 @@ export const endCardSchema = z.object({
   })),
 });
 
-/** Still-card intro: logo + hook text, staged via stage_asset (basename only).
-    null = no card intro (falls back to the introSrc video path, if any). */
+/** Still-card intro: hero product photo + hook text (+ optional small logo
+    chip), staged via stage_asset (basename only). null = no card intro (falls
+    back to the introSrc video path, if any). */
 export const introCardSchema = z.object({
-  logo: z.string(),   // staticFile basename in the render staging dir
+  image: z.string().default(""),  // staticFile basename of the hero photo; "" = no image
+  logo: z.string().default(""),   // staticFile basename of a small logo chip; "" = no logo
   text: z.string(),
 });
 
