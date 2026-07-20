@@ -62,6 +62,7 @@ def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
                 intro_src: str, intro_dur: float, out_dir: Path,
                 bg_music_src: str = "", bg_music_vol: float = 0.0,
+                end_image_src: str = "",
                 extra_flags: list[str] | None = None) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
@@ -91,6 +92,8 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
         "intensity": cues["intensity"],
         "captions": cues["captions"],     # each caption carries per-word timing
         "overlays": cues.get("overlays", []),
+        "endImage": end_image_src,
+        "endImageDur": cues.get("end_image_dur", 0.0),
         "cutPointsSec": cut_points_sec(cues["keep_ranges"]),
         "cta": {"text": cta["text"], "durationSec": cta.get("duration_sec", 1.6)},
         "brand": brand,
@@ -174,7 +177,7 @@ def run(video: Path, cfg: dict | None = None, *,
 
     try:
         outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir,
-                               bg_src, bg_vol, extra_flags)
+                               bg_src, bg_vol, "", extra_flags)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)

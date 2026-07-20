@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Img,
   OffthreadVideo,
   Sequence,
   interpolate,
@@ -212,11 +213,37 @@ const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, 
   );
 };
 
+/** The payoff photo: held for its full duration with a slow ken-burns push-in. */
+const EndImageCard: React.FC<{ image: string; durationInFrames: number }> = ({
+  image,
+  durationInFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, durationInFrames], [1, 1.08], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
+      <Img
+        src={src(image)}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          transform: `scale(${scale})`,
+        }}
+      />
+    </AbsoluteFill>
+  );
+};
+
 export const Reel: React.FC<ReelProps> = (props) => {
   const { fps, durationInFrames } = useVideoConfig();
   const introF = Math.round(props.introDur * fps);
   const clipF = Math.round(props.clipDur * fps);
   const ctaF = Math.round(props.cta.durationSec * fps);
+  const endF = props.endImage ? Math.round(props.endImageDur * fps) : 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.brand.bg_color }}>
@@ -248,7 +275,13 @@ export const Reel: React.FC<ReelProps> = (props) => {
         <ContentClip {...props} />
       </Sequence>
 
-      <Sequence from={introF + clipF} durationInFrames={ctaF}>
+      {endF > 0 ? (
+        <Sequence from={introF + clipF} durationInFrames={endF}>
+          <EndImageCard image={props.endImage} durationInFrames={endF} />
+        </Sequence>
+      ) : null}
+
+      <Sequence from={introF + clipF + endF} durationInFrames={ctaF}>
         <CtaCard text={props.cta.text} brand={props.brand} />
       </Sequence>
     </AbsoluteFill>

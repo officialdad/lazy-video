@@ -36,6 +36,8 @@ const DEFAULT_PROPS: ReelProps = {
     },
   ],
   overlays: [],
+  endImage: "",
+  endImageDur: 0,
   cta: { text: "FOLLOW & STAY TUNED", durationSec: 1.6 },
   brand: DEFAULT_BRAND,
   bgMusic: "",
@@ -57,7 +59,9 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       durationInFrames={Math.round((0 + 6 + 1.6) * FPS)}
       calculateMetadata={({ props }) => ({
-        durationInFrames: Math.round((props.introDur + props.clipDur + props.cta.durationSec) * FPS),
+        durationInFrames: Math.round(
+          (props.introDur + props.clipDur + props.endImageDur + props.cta.durationSec) * FPS,
+        ),
         fps: FPS,
         width: 1080,
         height: 1920,

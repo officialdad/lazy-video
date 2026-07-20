@@ -52,6 +52,9 @@ export const reelSchema = z.object({
   intensity: z.enum(["gentle", "medium", "hype"]),
   captions: z.array(captionSchema),
   overlays: z.array(overlaySchema).default([]),
+  /** Payoff photo held after the content clip, before the CTA. "" = no photo beat. */
+  endImage: z.string().default(""),
+  endImageDur: z.number().default(0),
   cutPointsSec: z.array(z.number()),
   cta: ctaSchema,
   brand: brandSchema,
