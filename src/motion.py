@@ -45,9 +45,13 @@ def yavg_per_second(video: Path) -> list[float]:
 def static_runs(yavg: list[float], threshold: float, min_dur: float) -> list[dict]:
     """Contiguous seconds below `threshold` lasting >= `min_dur`, as {start, end}.
 
-    Sampling is 1 fps, so index == second. A value exactly at the threshold counts
-    as motion (keep footage when in doubt -- deleting real content is the costly
-    mistake, an extra second of stillness is not)."""
+    Index i is the tblend diff across the interval [i, i+1], not a snapshot of
+    second i alone -- so a run of low values at indices a..b-1 means stillness
+    over [a, b]. The reported `end` is therefore up to 1s short of the true still
+    window (the final still second has no successor to prove it's still). That's
+    deliberate: keep footage when in doubt -- deleting real content is the costly
+    mistake, an extra second of stillness is not. A value exactly at the threshold
+    counts as motion."""
     runs: list[dict] = []
     start: int | None = None
     for i, v in enumerate(yavg):
