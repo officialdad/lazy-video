@@ -46,11 +46,15 @@ def ffprobe_dims(path: Path) -> tuple[int, int]:
 
 
 def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
-    """Clip-local times where shots join (punch-in points), plus 0 for the opening."""
+    """Clip-local times where shots join (punch-in points), plus 0 for the opening.
+
+    keep_ranges are source-time (start, end[, speed]); a sped-up range occupies
+    only duration/speed on the clip's own timeline."""
     points = [0.0]
     cum = 0.0
     for r in keep_ranges[:-1]:
-        cum += r[1] - r[0]
+        speed = r[2] if len(r) > 2 else 1.0
+        cum += (r[1] - r[0]) / speed
         points.append(round(cum, 3))
     return points
 
