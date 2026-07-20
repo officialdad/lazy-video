@@ -47,6 +47,18 @@ export const overlaySchema = z.object({
   dir: z.enum(["up", "down"]).default("down"),
 });
 
+/** End card: a title + icon/label list shown over the payoff photo beat.
+    icon fields are logical names (see captionSchema.icon) resolved in Reel.tsx's
+    CAPTION_ICONS map -- "" = no icon, same contract as captions. */
+export const endCardSchema = z.object({
+  title: z.string(),
+  icon: z.string().default(""),                 // ceremony accent icon (logical name)
+  items: z.array(z.object({
+    icon: z.string().default(""),               // logical name
+    label: z.string(),
+  })),
+});
+
 export const reelSchema = z.object({
   clipSrc: z.string(),
   introSrc: z.string(),
@@ -59,6 +71,8 @@ export const reelSchema = z.object({
   /** Payoff photo held after the content clip, before the CTA. "" = no photo beat. */
   endImage: z.string().default(""),
   endImageDur: z.number().default(0),
+  /** Optional title + icon/label list shown over the endImage photo beat. null = none. */
+  endCard: endCardSchema.nullable().default(null),
   cutPointsSec: z.array(z.number()),
   cta: ctaSchema,
   brand: brandSchema,
@@ -73,4 +87,5 @@ export type ReelProps = z.infer<typeof reelSchema>;
 export type Caption = z.infer<typeof captionSchema>;
 export type Word = z.infer<typeof wordSchema>;
 export type Overlay = z.infer<typeof overlaySchema>;
+export type EndCard = z.infer<typeof endCardSchema>;
 export type Intensity = ReelProps["intensity"];

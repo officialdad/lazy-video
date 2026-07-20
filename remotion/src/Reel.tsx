@@ -20,11 +20,19 @@ import {
   mdiMemory,
   mdiHarddisk,
   mdiController,
+  mdiMagnify,
+  mdiCheckDecagram,
+  mdiCashMultiple,
+  mdiWrench,
+  mdiServerNetwork,
+  mdiControllerClassic,
+  mdiRobotOutline,
+  mdiPartyPopper,
 } from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
-import type { Overlay, ReelProps } from "./schema";
+import type { EndCard, Overlay, ReelProps } from "./schema";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
 
@@ -40,6 +48,14 @@ export const CAPTION_ICONS: Record<string, string> = {
   memory: mdiMemory,
   harddisk: mdiHarddisk,
   controller: mdiController,
+  search: mdiMagnify,
+  check: mdiCheckDecagram,
+  cash: mdiCashMultiple,
+  wrench: mdiWrench,
+  server: mdiServerNetwork,
+  gamepad: mdiControllerClassic,
+  robot: mdiRobotOutline,
+  party: mdiPartyPopper,
 };
 
 /** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
@@ -262,6 +278,117 @@ const EndImageCard: React.FC<{ image: string; durationInFrames: number }> = ({
   );
 };
 
+/** Payoff list overlaid on the lower half of the endImage photo: a title (with
+    an optional ceremony icon) plus a staggered-in icon+label list. Lives inside
+    the same Sequence as EndImageCard so it tracks the photo's timeline exactly
+    -- see Reel's endF Sequence below. Resolves icons via the passed iconMap
+    (same threading as Captions.tsx's iconMap prop) rather than importing
+    CAPTION_ICONS directly, so an unknown/missing name never throws. */
+const EndCardOverlay: React.FC<{ card: EndCard; brand: ReelProps["brand"]; iconMap: Record<string, string> }> = ({
+  card,
+  brand,
+  iconMap,
+}) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const titleSpring = spring({ frame, fps, config: { damping: 200, mass: 0.6, stiffness: 120 } });
+  const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
+  const titleY = interpolate(titleSpring, [0, 1], [30, 0]);
+  const titleIcon = card.icon ? iconMap[card.icon] : undefined;
+
+  const label = (t: string) => (brand.caption_uppercase ? t.toUpperCase() : t);
+
+  return (
+    <AbsoluteFill>
+      {/* legibility scrim + list -- pinned to exactly the lower half so the top
+          half of the photo (the payoff shot itself) always stays clear */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: "50%",
+          bottom: 0,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          padding: "44px 64px 100px",
+          background: brand.caption_bg,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 20,
+            marginBottom: 40,
+            opacity: titleOpacity,
+            transform: `translateY(${titleY}px)`,
+          }}
+        >
+          {titleIcon ? (
+            <svg viewBox="0 0 24 24" width={64} height={64}>
+              <path d={titleIcon} fill={brand.caption_highlight_color} />
+            </svg>
+          ) : null}
+          <div
+            style={{
+              fontFamily: brand.caption_font,
+              fontWeight: 400,
+              fontSize: 62,
+              letterSpacing: 1,
+              lineHeight: 1.05,
+              color: brand.caption_highlight_color,
+              textShadow: "0 3px 10px rgba(0,0,0,0.5)",
+            }}
+          >
+            {label(card.title)}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+          {card.items.map((item, i) => {
+            // stagger: title settles first, then each row ~8 frames after the last
+            const rowSpring = spring({
+              frame: frame - 10 - i * 8,
+              fps,
+              config: { damping: 200, mass: 0.6, stiffness: 120 },
+            });
+            const opacity = interpolate(rowSpring, [0, 1], [0, 1]);
+            const y = interpolate(rowSpring, [0, 1], [26, 0]);
+            const itemIcon = item.icon ? iconMap[item.icon] : undefined;
+            return (
+              <div
+                key={i}
+                style={{ display: "flex", alignItems: "center", gap: 20, opacity, transform: `translateY(${y}px)` }}
+              >
+                {itemIcon ? (
+                  <svg viewBox="0 0 24 24" width={48} height={48}>
+                    <path d={itemIcon} fill={brand.caption_highlight_color} />
+                  </svg>
+                ) : null}
+                <div
+                  style={{
+                    fontFamily: brand.caption_font,
+                    fontWeight: 400,
+                    fontSize: 50,
+                    letterSpacing: 0.5,
+                    color: brand.caption_color,
+                    textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                  }}
+                >
+                  {label(item.label)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const Reel: React.FC<ReelProps> = (props) => {
   const { fps, durationInFrames } = useVideoConfig();
   const introF = Math.round(props.introDur * fps);
@@ -303,6 +430,9 @@ export const Reel: React.FC<ReelProps> = (props) => {
       {endF > 0 ? (
         <Sequence from={introF + clipF} durationInFrames={endF}>
           <EndImageCard image={props.endImage} durationInFrames={endF} />
+          {props.endCard ? (
+            <EndCardOverlay card={props.endCard} brand={props.brand} iconMap={CAPTION_ICONS} />
+          ) : null}
         </Sequence>
       ) : null}
 

@@ -91,6 +91,22 @@ def validate(edl: dict) -> list[str]:
         if off is not None and (not isinstance(off, (int, float)) or off < 0):
             errs.append(f"{tag}: bg_music_offset {off!r} must be >= 0")
 
+        # end_card (optional): title + icon/label payoff list over the end photo.
+        end_card = seg.get("end_card")
+        if end_card is not None:
+            if not isinstance(end_card, dict):
+                errs.append(f"{tag}: end_card must be an object")
+            else:
+                if not (end_card.get("title") or "").strip():
+                    errs.append(f"{tag}: end_card.title is empty")
+                items = end_card.get("items")
+                if not items:
+                    errs.append(f"{tag}: end_card.items is empty")
+                else:
+                    for i, item in enumerate(items):
+                        if not isinstance(item, dict) or not (item.get("label") or "").strip():
+                            errs.append(f"{tag}: end_card.items[{i}] has an empty label")
+
         for cap in seg.get("captions") or []:
             ctag = f"{tag} caption {cap.get('start')}s {cap.get('text', '')[:30]!r}"
             if not (cap.get("text") or "").strip():

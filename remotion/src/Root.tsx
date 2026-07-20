@@ -39,6 +39,7 @@ const DEFAULT_PROPS: ReelProps = {
   overlays: [],
   endImage: "",
   endImageDur: 0,
+  endCard: null,
   cta: { text: "FOLLOW & STAY TUNED", durationSec: 1.6 },
   brand: DEFAULT_BRAND,
   bgMusic: "",

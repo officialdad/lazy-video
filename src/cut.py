@@ -183,6 +183,7 @@ def cut_segment(video: Path, seg: dict, clips_dir: Path, cfg: dict) -> dict:
         "cta_duration_sec": seg.get("cta_duration_sec"),
         "end_image": seg.get("end_image", ""),
         "end_image_dur": seg.get("end_image_dur", 0.0),
+        "end_card": seg.get("end_card"),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"clip": str(clip_path), "duration": duration, "captions": len(captions)}
 

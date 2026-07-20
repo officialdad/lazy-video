@@ -60,4 +60,33 @@ assert validate(edl(end_image_dur=1.5)) == []
 # a zero offset is legal (it is the default)
 assert validate(edl(bg_music_offset=0.0)) == []
 
+# --- end_card (optional): title + icon/label payoff list over the end photo ---
+valid_end_card = {
+    "title": "MINI PC BOLEH BUAT APA?",
+    "icon": "party",
+    "items": [
+        {"icon": "server", "label": "HOMELAB"},
+        {"icon": "gamepad", "label": "LIGHT GAMING"},
+        {"icon": "robot", "label": "AI AGENT"},
+    ],
+}
+
+# absent end_card is valid (the default -- no regression for existing EDLs)
+assert validate(edl()) == []
+
+# a well-formed end_card passes
+assert validate(edl(end_card=valid_end_card)) == [], validate(edl(end_card=valid_end_card))
+
+# missing/empty title is caught
+errs = validate(edl(end_card={**valid_end_card, "title": ""}))
+assert any("end_card" in e and "title" in e for e in errs), errs
+
+# empty items is caught
+errs = validate(edl(end_card={**valid_end_card, "items": []}))
+assert any("end_card" in e and "items" in e for e in errs), errs
+
+# an item missing its label is caught
+errs = validate(edl(end_card={**valid_end_card, "items": [{"icon": "server", "label": ""}]}))
+assert any("end_card" in e and "label" in e for e in errs), errs
+
 print("validate_edl contract OK")
