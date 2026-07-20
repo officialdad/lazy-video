@@ -30,6 +30,19 @@ export const ctaSchema = z.object({
   durationSec: z.number(),
 });
 
+/** Attention overlay: an animated MDI arrow or a pulsing highlight box.
+    x/y (and w/h for highlight) are % of the output frame; times are clip-local. */
+export const overlaySchema = z.object({
+  type: z.enum(["arrow", "highlight"]),
+  start: z.number(),
+  end: z.number(),
+  x: z.number(),
+  y: z.number(),
+  w: z.number().default(0),
+  h: z.number().default(0),
+  dir: z.enum(["up", "down"]).default("down"),
+});
+
 export const reelSchema = z.object({
   clipSrc: z.string(),
   introSrc: z.string(),
@@ -38,6 +51,7 @@ export const reelSchema = z.object({
   title: z.string(),
   intensity: z.enum(["gentle", "medium", "hype"]),
   captions: z.array(captionSchema),
+  overlays: z.array(overlaySchema).default([]),
   cutPointsSec: z.array(z.number()),
   cta: ctaSchema,
   brand: brandSchema,
@@ -49,4 +63,5 @@ export const reelSchema = z.object({
 export type ReelProps = z.infer<typeof reelSchema>;
 export type Caption = z.infer<typeof captionSchema>;
 export type Word = z.infer<typeof wordSchema>;
+export type Overlay = z.infer<typeof overlaySchema>;
 export type Intensity = ReelProps["intensity"];

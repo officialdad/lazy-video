@@ -86,6 +86,7 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
         "title": cues["title"],
         "intensity": cues["intensity"],
         "captions": cues["captions"],     # each caption carries per-word timing
+        "overlays": cues.get("overlays", []),
         "cutPointsSec": cut_points_sec(cues["keep_ranges"]),
         "cta": {"text": cta["text"], "durationSec": cta.get("duration_sec", 1.6)},
         "brand": brand,

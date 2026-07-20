@@ -123,12 +123,19 @@ def detect_silences(segs_text: list[dict], threshold: float, pad: float = 0.15) 
 
 
 def words_in_range(words: list[dict], start: float, end: float) -> list[dict]:
-    """Words whose midpoint falls within [start, end] (source time)."""
-    out = []
+    """Words whose midpoint falls within [start, end] (source time).
+
+    Whisper splits BM reduplication ("pusing-pusing") into "pusing" + "-pusing";
+    merge the hyphen-continuation back so joined karaoke words == the caption text."""
+    out: list[dict] = []
     for w in words:
         mid = (w["start"] + w["end"]) / 2
         if start <= mid <= end:
-            out.append({"w": w["word"], "start": w["start"], "end": w["end"]})
+            if out and w["word"].startswith("-"):
+                out[-1]["w"] += w["word"]
+                out[-1]["end"] = w["end"]
+            else:
+                out.append({"w": w["word"], "start": w["start"], "end": w["end"]})
     return out
 
 

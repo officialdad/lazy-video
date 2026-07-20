@@ -59,6 +59,21 @@ def validate(edl: dict) -> list[str]:
                 errs.append(f"{tag}: cut {cs}-{ce} overlaps previous cut ending {prev_end}")
             prev_end = ce
 
+        # speedups (optional): fast-forward regions, e.g. a no-speech coding demo.
+        # factor > 1, inside span, must not overlap a cut (cut wins -> ambiguous).
+        for z in sorted(seg.get("speedups") or [], key=lambda z: z["start"]):
+            zs, ze, f = z.get("start"), z.get("end"), z.get("factor")
+            if zs is None or ze is None or zs >= ze:
+                errs.append(f"{tag}: speedup {zs}-{ze} has non-positive length")
+                continue
+            if not isinstance(f, (int, float)) or f <= 1.0:
+                errs.append(f"{tag}: speedup {zs}-{ze} factor {f!r} must be > 1")
+            if zs < start - EPS or ze > end + EPS:
+                errs.append(f"{tag}: speedup {zs}-{ze} outside segment span {start}-{end}")
+            for c in cuts:
+                if zs < c["end"] - EPS and c["start"] < ze - EPS:
+                    errs.append(f"{tag}: speedup {zs}-{ze} overlaps cut {c['start']}-{c['end']}")
+
         for cap in seg.get("captions") or []:
             ctag = f"{tag} caption {cap.get('start')}s {cap.get('text', '')[:30]!r}"
             if not (cap.get("text") or "").strip():

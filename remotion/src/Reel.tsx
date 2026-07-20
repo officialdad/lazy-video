@@ -10,13 +10,65 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { mdiGestureSwipeLeft } from "@mdi/js";
+import { mdiArrowDownBold, mdiArrowUpBold, mdiGestureSwipeLeft } from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
-import type { ReelProps } from "./schema";
+import type { Overlay, ReelProps } from "./schema";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
+
+/** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
+const ArrowOverlay: React.FC<{ o: Overlay; color: string }> = ({ o, color }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 200 } });
+  const bob = Math.sin((frame / fps) * Math.PI * 2 * 1.4) * 16; // gentle 1.4 Hz bounce
+  const along = o.dir === "up" ? -bob : bob;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${o.x}%`,
+        top: `${o.y}%`,
+        transform: `translate(-50%, -50%) translateY(${along}px) scale(${interpolate(pop, [0, 1], [0.3, 1])})`,
+      }}
+    >
+      <svg viewBox="0 0 24 24" width={130} height={130}>
+        <path
+          d={o.dir === "up" ? mdiArrowUpBold : mdiArrowDownBold}
+          fill={color}
+          stroke="rgba(0,0,0,0.6)"
+          strokeWidth={0.6}
+        />
+      </svg>
+    </div>
+  );
+};
+
+/** Pulsing outline drawing attention to a screen region; x/y/w/h are % of the frame. */
+const HighlightOverlay: React.FC<{ o: Overlay; color: string }> = ({ o, color }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 200 } });
+  const pulse = 0.55 + 0.45 * Math.abs(Math.sin((frame / fps) * Math.PI * 1.6));
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${o.x}%`,
+        top: `${o.y}%`,
+        width: `${o.w}%`,
+        height: `${o.h}%`,
+        border: `6px solid ${color}`,
+        borderRadius: 16,
+        boxShadow: `0 0 26px ${color}88, inset 0 0 26px ${color}44`,
+        opacity: pulse * pop,
+        transform: `scale(${interpolate(pop, [0, 1], [1.15, 1])})`,
+      }}
+    />
+  );
+};
 
 /** The content clip: blurred cover background + sharp contained foreground with motion. */
 const ContentClip: React.FC<ReelProps> = (props) => {
@@ -94,6 +146,21 @@ const ContentClip: React.FC<ReelProps> = (props) => {
         uppercase={props.brand.caption_uppercase}
         maxWords={props.brand.caption_max_words}
       />
+
+      {/* attention overlays (arrows / highlight boxes) at clip-local times */}
+      {(props.overlays ?? []).map((o, i) => (
+        <Sequence
+          key={i}
+          from={Math.round(o.start * fps)}
+          durationInFrames={Math.max(1, Math.round((o.end - o.start) * fps))}
+        >
+          {o.type === "arrow" ? (
+            <ArrowOverlay o={o} color={props.brand.caption_highlight_color} />
+          ) : (
+            <HighlightOverlay o={o} color={props.brand.caption_highlight_color} />
+          )}
+        </Sequence>
+      ))}
 
       {/* thin progress bar */}
       {props.brand.show_progress_bar ? (
