@@ -13,6 +13,7 @@ const DEFAULT_BRAND = {
   caption_bg: "rgba(0,0,0,0.55)",
   show_progress_bar: true,
   bg_color: "#0B132B",
+  text_animation: "default" as const,
 };
 
 // Preview defaults; the real values are injected per-render via --props.

@@ -27,6 +27,10 @@ export const brandSchema = z.object({
   caption_bg: z.string(),
   show_progress_bar: z.boolean(),
   bg_color: z.string().default("#0B132B"),
+  /** "default" = today's behaviour (karaoke captions, fade/slide-in text)
+      unchanged. "typewriter" = all on-screen text types on character-by-
+      character with a blinking cursor (see remotion/src/typewriter.ts). */
+  text_animation: z.enum(["default", "typewriter"]).default("default"),
 });
 
 export const ctaSchema = z.object({

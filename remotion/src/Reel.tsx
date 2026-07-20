@@ -36,6 +36,7 @@ import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
 import type { EndCard, IntroCard as IntroCardData, Overlay, ReelProps } from "./schema";
+import { CURSOR_GLYPH, charsPerFrameFor, cursorVisible, revealChunks, typedCount } from "./typewriter";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
 
@@ -192,6 +193,7 @@ const ContentClip: React.FC<ReelProps> = (props) => {
         uppercase={props.brand.caption_uppercase}
         maxWords={props.brand.caption_max_words}
         iconMap={CAPTION_ICONS}
+        textAnimation={props.brand.text_animation}
       />
 
       {/* attention overlays (arrows / highlight boxes) at clip-local times */}
@@ -219,13 +221,27 @@ const ContentClip: React.FC<ReelProps> = (props) => {
   );
 };
 
-/** Swipe-left CTA card: a brand panel slides in from the right (replaces the outro). */
-const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, brand }) => {
+/** Swipe-left CTA card: a brand panel slides in from the right (replaces the outro).
+    durationInFrames is this card's own Sequence-local duration (ctaF in Reel below)
+    -- useVideoConfig() only exposes the composition's total, see EndCardOverlay's
+    note -- needed to size the typewriter typing speed when text_animation is set. */
+const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"]; durationInFrames: number }> = ({
+  text,
+  brand,
+  durationInFrames,
+}) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
   const enter = spring({ frame, fps, config: { damping: 200, mass: 0.7, stiffness: 90 } });
   const x = interpolate(enter, [0, 1], [width, 0]); // from offscreen-right to 0 = swipe left
   const arrowPop = spring({ frame: frame - 6, fps, config: { damping: 200 } });
+
+  const isTypewriter = brand.text_animation === "typewriter";
+  const displayText = text.toUpperCase();
+  const charsPerFrame = charsPerFrameFor(displayText.length, durationInFrames);
+  const typed = isTypewriter ? typedCount(frame, 0, displayText.length, charsPerFrame) : displayText.length;
+  const shownText = isTypewriter ? displayText.slice(0, typed) : displayText;
+  const showCursor = isTypewriter && cursorVisible(frame, 0, displayText.length, charsPerFrame);
 
   return (
     <AbsoluteFill style={{ transform: `translateX(${x}px)`, backgroundColor: brand.bg_color }}>
@@ -251,7 +267,8 @@ const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, 
             textShadow: "0 4px 14px rgba(0,0,0,0.5)",
           }}
         >
-          {text.toUpperCase()}
+          {shownText}
+          {showCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
         </div>
         <div style={{ width: 220, height: 10, borderRadius: 6, background: brand.caption_highlight_color }} />
       </AbsoluteFill>
@@ -326,6 +343,21 @@ const EndCardOverlay: React.FC<{
   const durationSec = durationInFrames / fps;
   const itemGapSec = durationSec / (card.items.length + 1);
 
+  // brand.text_animation === "typewriter": title types first (across the slot
+  // before the first item lands), then each item's label types across its own
+  // evenly-spaced slot (itemGapSec, same spacing as the pop-in stagger above)
+  // once that item's row starts revealing. Every element below picks its own
+  // startFrame/duration off the same itemGapSec beat, so a cursor only ever
+  // blinks on whichever title/label is currently "typing" -- no coordination
+  // needed between them.
+  const isTypewriter = brand.text_animation === "typewriter";
+  const titleText = label(card.title);
+  const titleWindowFrames = Math.max(1, Math.round(itemGapSec * fps));
+  const titleCharsPerFrame = charsPerFrameFor(titleText.length, titleWindowFrames);
+  const titleTyped = isTypewriter ? typedCount(frame, 0, titleText.length, titleCharsPerFrame) : titleText.length;
+  const titleShown = isTypewriter ? titleText.slice(0, titleTyped) : titleText;
+  const titleCursor = isTypewriter && cursorVisible(frame, 0, titleText.length, titleCharsPerFrame);
+
   return (
     <AbsoluteFill
       style={{
@@ -368,7 +400,8 @@ const EndCardOverlay: React.FC<{
             maxWidth: "92%",
           }}
         >
-          {label(card.title)}
+          {titleShown}
+          {titleCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
         </div>
       </div>
 
@@ -386,6 +419,15 @@ const EndCardOverlay: React.FC<{
           const y = interpolate(rowSpring, [0, 1], [30, 0]);
           const scale = interpolate(rowSpring, [0, 1], [0.85, 1]);
           const itemIcon = item.icon ? iconMap[item.icon] : undefined;
+
+          const labelText = label(item.label);
+          const itemWindowFrames = Math.max(1, Math.round(itemGapSec * fps));
+          const itemCharsPerFrame = charsPerFrameFor(labelText.length, itemWindowFrames);
+          const itemTyped = isTypewriter
+            ? typedCount(frame, delayFrames, labelText.length, itemCharsPerFrame)
+            : labelText.length;
+          const itemShown = isTypewriter ? labelText.slice(0, itemTyped) : labelText;
+          const itemCursor = isTypewriter && cursorVisible(frame, delayFrames, labelText.length, itemCharsPerFrame);
           return (
             <div
               key={i}
@@ -413,7 +455,8 @@ const EndCardOverlay: React.FC<{
                   textShadow: END_CARD_TEXT_SHADOW,
                 }}
               >
-                {label(item.label)}
+                {itemShown}
+                {itemCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
               </div>
             </div>
           );
@@ -469,6 +512,7 @@ const IntroCard: React.FC<{
 }> = ({ card, brand, durationInFrames }) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
+  const isTypewriter = brand.text_animation === "typewriter";
 
   // image fades in and starts its slow zoom right away
   const imageSpring = spring({ frame, fps, config: { damping: 200, mass: 0.5, stiffness: 140 } });
@@ -480,6 +524,7 @@ const IntroCard: React.FC<{
 
   // hook text follows a short stagger after the image, sized off the card's own
   // duration (not a fixed frame count) so the pacing still works if duration_sec changes
+  // -- default mode only; typewriter mode starts typing at frame 0 (see below).
   const textDelayFrames = Math.round(durationInFrames * 0.28);
   const textSpring = spring({
     frame: frame - textDelayFrames,
@@ -489,17 +534,41 @@ const IntroCard: React.FC<{
   const textOpacity = interpolate(textSpring, [0, 1], [0, 1]);
   const textY = interpolate(textSpring, [0, 1], [40, 0]);
 
-  // accent bar wipes in a beat after the text starts landing
-  const barDelayFrames = textDelayFrames + Math.round(fps * 0.15);
+  const displayText = brand.caption_uppercase ? card.text.toUpperCase() : card.text;
+  const segments = splitHookText(displayText);
+
+  // typewriter: type across all segments' text in one running character
+  // budget so splitHookText's highlight/base split survives typing (a
+  // segment may show only its first k characters) -- mirrors Captions.tsx's
+  // per-word walk, generalised to per-segment via revealChunks. Typing
+  // starts at frame 0 (the card's intro duration is short -- ~2s -- so the
+  // full duration is used as the typing window, per the "intro
+  // durationInFrames" example in the spec) rather than waiting out the
+  // default entrance stagger; the per-character reveal is itself the
+  // entrance, so the fade/slide spring above is skipped in this mode.
+  const totalChars = segments.reduce((n, s) => n + s.text.length, 0);
+  const textCharsPerFrame = charsPerFrameFor(totalChars, durationInFrames);
+  const textTyped = isTypewriter ? typedCount(frame, 0, totalChars, textCharsPerFrame) : totalChars;
+  const showTextCursor = isTypewriter && cursorVisible(frame, 0, totalChars, textCharsPerFrame);
+  const revealedSegments = revealChunks(
+    segments.map((s) => ({ text: s.text, meta: s.highlight })),
+    textTyped,
+  );
+  // typing finishes at this frame -- the accent bar wipes in a beat after,
+  // instead of the default's fixed stagger-based delay, so it never appears
+  // mid-type.
+  const typingDoneFrame = textCharsPerFrame > 0 ? totalChars / textCharsPerFrame : 0;
+
+  // accent bar wipes in a beat after the text lands
+  const barDelayFrames = isTypewriter
+    ? Math.round(typingDoneFrame + fps * 0.15)
+    : textDelayFrames + Math.round(fps * 0.15);
   const barSpring = spring({
     frame: frame - barDelayFrames,
     fps,
     config: { damping: 200, mass: 0.5, stiffness: 140 },
   });
   const barScale = interpolate(barSpring, [0, 1], [0, 1]);
-
-  const displayText = brand.caption_uppercase ? card.text.toUpperCase() : card.text;
-  const segments = splitHookText(displayText);
 
   return (
     <AbsoluteFill style={{ backgroundColor: INTRO_CARD_BG }}>
@@ -529,11 +598,14 @@ const IntroCard: React.FC<{
         </div>
       ) : null}
 
-      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: "9%" }}>
+      {/* typewriter mode nudges the hook up a bit (paddingBottom 9% -> 12%) to
+          shrink the dark gap between the image and the text; default mode is
+          left exactly as it was. */}
+      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: isTypewriter ? "12%" : "9%" }}>
         <div
           style={{
-            opacity: textOpacity,
-            transform: `translateY(${textY}px)`,
+            opacity: isTypewriter ? 1 : textOpacity,
+            transform: isTypewriter ? undefined : `translateY(${textY}px)`,
             fontFamily: CAPTION_FONT,
             fontWeight: 900,
             fontSize: 92,
@@ -544,11 +616,30 @@ const IntroCard: React.FC<{
             textShadow: END_CARD_TEXT_SHADOW,
           }}
         >
-          {segments.map((seg, i) => (
-            <span key={i} style={{ color: seg.highlight ? brand.caption_highlight_color : brand.caption_color }}>
-              {seg.text}
-            </span>
-          ))}
+          {isTypewriter
+            ? revealedSegments.map((chunk, i) =>
+                chunk.shown ? (
+                  <span
+                    key={i}
+                    style={{
+                      color: chunk.meta ? brand.caption_highlight_color : brand.caption_color,
+                      // keep "MINI PC" from breaking across lines (the bug this
+                      // task fixes) -- only the highlighted accent segment needs it
+                      whiteSpace: chunk.meta ? "nowrap" : undefined,
+                    }}
+                  >
+                    {chunk.shown}
+                    {chunk.isCurrent && showTextCursor ? (
+                      <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span>
+                    ) : null}
+                  </span>
+                ) : null,
+              )
+            : segments.map((seg, i) => (
+                <span key={i} style={{ color: seg.highlight ? brand.caption_highlight_color : brand.caption_color }}>
+                  {seg.text}
+                </span>
+              ))}
         </div>
         <div
           style={{
@@ -617,7 +708,7 @@ export const Reel: React.FC<ReelProps> = (props) => {
       ) : null}
 
       <Sequence from={introF + clipF + endF} durationInFrames={ctaF}>
-        <CtaCard text={props.cta.text} brand={props.brand} />
+        <CtaCard text={props.cta.text} brand={props.brand} durationInFrames={ctaF} />
       </Sequence>
     </AbsoluteFill>
   );
