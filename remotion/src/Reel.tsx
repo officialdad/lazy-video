@@ -28,6 +28,7 @@ import {
   mdiControllerClassic,
   mdiRobotOutline,
   mdiPartyPopper,
+  mdiBookOpenPageVariant,
 } from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
@@ -39,7 +40,7 @@ const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
 /** Logical caption icon name (schema.ts captionSchema.icon) -> MDI path data.
     Keeps the EDL/schema free of @mdi/js internals -- a caption just names one
     of these, never a raw mdi* export.
-    ponytail: fixed icon set (13 entries) for the chapter-card use case; upgrade
+    ponytail: fixed icon set (14 entries) for the chapter-card use case; upgrade
     path if more are ever needed is to widen this map (or generate it from
     @mdi/js's exports), not to accept raw MDI names in the EDL. */
 export const CAPTION_ICONS: Record<string, string> = {
@@ -56,6 +57,7 @@ export const CAPTION_ICONS: Record<string, string> = {
   gamepad: mdiControllerClassic,
   robot: mdiRobotOutline,
   party: mdiPartyPopper,
+  book: mdiBookOpenPageVariant,
 };
 
 /** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
@@ -278,17 +280,32 @@ const EndImageCard: React.FC<{ image: string; durationInFrames: number }> = ({
   );
 };
 
-/** Payoff list overlaid on the lower half of the endImage photo: a title (with
-    an optional ceremony icon) plus a staggered-in icon+label list. Lives inside
-    the same Sequence as EndImageCard so it tracks the photo's timeline exactly
-    -- see Reel's endF Sequence below. Resolves icons via the passed iconMap
-    (same threading as Captions.tsx's iconMap prop) rather than importing
-    CAPTION_ICONS directly, so an unknown/missing name never throws. */
-const EndCardOverlay: React.FC<{ card: EndCard; brand: ReelProps["brand"]; iconMap: Record<string, string> }> = ({
-  card,
-  brand,
-  iconMap,
-}) => {
+// Strong dark shadows so white text/icons stay legible directly on the photo
+// with no background scrim behind them.
+const END_CARD_TEXT_SHADOW = "0 4px 16px rgba(0,0,0,0.9), 0 2px 5px rgba(0,0,0,0.95)";
+const END_CARD_ICON_SHADOW = "drop-shadow(0 3px 10px rgba(0,0,0,0.9))";
+
+/** Payoff title + icon/label list overlaid directly on the endImage photo (no
+    scrim/panel -- legibility comes from textShadow/drop-shadow on the glyphs
+    themselves). Centered horizontally, anchored so the title lands around the
+    photo's lower-middle and items flow below it, leaving the mini PC / monitor
+    in the photo's upper half uncovered. Lives inside the same Sequence as
+    EndImageCard so it tracks the photo's timeline exactly -- see Reel's endF
+    Sequence below. Resolves icons via the passed iconMap (same threading as
+    Captions.tsx's iconMap prop) rather than importing CAPTION_ICONS directly,
+    so an unknown/missing name never throws.
+    Items reveal one at a time (title first, then each item at its own evenly-
+    spaced moment) rather than almost simultaneously -- the per-item delay is
+    derived from durationInFrames/fps (this Sequence's own duration, passed in
+    as a prop since useVideoConfig() only exposes the *composition's* total
+    duration, not a nested Sequence's) so the pacing still works if endImageDur
+    changes. */
+const EndCardOverlay: React.FC<{
+  card: EndCard;
+  brand: ReelProps["brand"];
+  iconMap: Record<string, string>;
+  durationInFrames: number;
+}> = ({ card, brand, iconMap, durationInFrames }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -299,91 +316,104 @@ const EndCardOverlay: React.FC<{ card: EndCard; brand: ReelProps["brand"]; iconM
 
   const label = (t: string) => (brand.caption_uppercase ? t.toUpperCase() : t);
 
+  // Spread items evenly across the beat: item i lands at (i+1)/(items+1) of the
+  // way through, e.g. 3 items in a 10s beat land at ~2.5s/5s/7.5s -- each its
+  // own moment, with the full list settled well before the beat ends.
+  const durationSec = durationInFrames / fps;
+  const itemGapSec = durationSec / (card.items.length + 1);
+
   return (
-    <AbsoluteFill>
-      {/* legibility scrim + list -- pinned to exactly the lower half so the top
-          half of the photo (the payoff shot itself) always stays clear */}
+    <AbsoluteFill
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        // ponytail: fixed paddingTop anchor (title lands ~45% down) rather than
+        // measuring rendered text height to truly center the block in the lower
+        // half; upgrade path if content length varies a lot is to switch to a
+        // justify-content: center layout within a bounded lower region.
+        paddingTop: "45%",
+        textAlign: "center",
+      }}
+    >
       <div
         style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: "50%",
-          bottom: 0,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "flex-end",
-          padding: "44px 64px 100px",
-          background: brand.caption_bg,
+          alignItems: "center",
+          gap: 18,
+          opacity: titleOpacity,
+          transform: `translateY(${titleY}px)`,
         }}
       >
+        {titleIcon ? (
+          <svg viewBox="0 0 24 24" width={88} height={88} style={{ filter: END_CARD_ICON_SHADOW }}>
+            <path d={titleIcon} fill={brand.caption_highlight_color} />
+          </svg>
+        ) : null}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 20,
-            marginBottom: 40,
-            opacity: titleOpacity,
-            transform: `translateY(${titleY}px)`,
+            fontFamily: CAPTION_FONT,
+            fontWeight: 900,
+            fontSize: 104,
+            letterSpacing: 1,
+            lineHeight: 1.05,
+            color: brand.caption_highlight_color,
+            textShadow: END_CARD_TEXT_SHADOW,
+            maxWidth: "92%",
           }}
         >
-          {titleIcon ? (
-            <svg viewBox="0 0 24 24" width={64} height={64}>
-              <path d={titleIcon} fill={brand.caption_highlight_color} />
-            </svg>
-          ) : null}
-          <div
-            style={{
-              fontFamily: CAPTION_FONT,
-              fontWeight: 400,
-              fontSize: 62,
-              letterSpacing: 1,
-              lineHeight: 1.05,
-              color: brand.caption_highlight_color,
-              textShadow: "0 3px 10px rgba(0,0,0,0.5)",
-            }}
-          >
-            {label(card.title)}
-          </div>
+          {label(card.title)}
         </div>
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-          {card.items.map((item, i) => {
-            // stagger: title settles first, then each row ~8 frames after the last
-            const rowSpring = spring({
-              frame: frame - 10 - i * 8,
-              fps,
-              config: { damping: 200, mass: 0.6, stiffness: 120 },
-            });
-            const opacity = interpolate(rowSpring, [0, 1], [0, 1]);
-            const y = interpolate(rowSpring, [0, 1], [26, 0]);
-            const itemIcon = item.icon ? iconMap[item.icon] : undefined;
-            return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 34, marginTop: 52 }}>
+        {card.items.map((item, i) => {
+          // sequential reveal: title settles first, then each item pops in on
+          // its own evenly-spaced beat (see itemGapSec above) and stays put
+          const delayFrames = Math.round((i + 1) * itemGapSec * fps);
+          const rowSpring = spring({
+            frame: frame - delayFrames,
+            fps,
+            config: { damping: 200, mass: 0.6, stiffness: 120 },
+          });
+          const opacity = interpolate(rowSpring, [0, 1], [0, 1]);
+          const y = interpolate(rowSpring, [0, 1], [30, 0]);
+          const scale = interpolate(rowSpring, [0, 1], [0.85, 1]);
+          const itemIcon = item.icon ? iconMap[item.icon] : undefined;
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 20,
+                opacity,
+                transform: `translateY(${y}px) scale(${scale})`,
+              }}
+            >
+              {itemIcon ? (
+                <svg viewBox="0 0 24 24" width={64} height={64} style={{ filter: END_CARD_ICON_SHADOW }}>
+                  <path d={itemIcon} fill={brand.caption_highlight_color} />
+                </svg>
+              ) : null}
               <div
-                key={i}
-                style={{ display: "flex", alignItems: "center", gap: 20, opacity, transform: `translateY(${y}px)` }}
+                style={{
+                  fontFamily: CAPTION_FONT,
+                  fontWeight: 900,
+                  fontSize: 72,
+                  letterSpacing: 0.5,
+                  color: brand.caption_color,
+                  textShadow: END_CARD_TEXT_SHADOW,
+                }}
               >
-                {itemIcon ? (
-                  <svg viewBox="0 0 24 24" width={48} height={48}>
-                    <path d={itemIcon} fill={brand.caption_highlight_color} />
-                  </svg>
-                ) : null}
-                <div
-                  style={{
-                    fontFamily: CAPTION_FONT,
-                    fontWeight: 400,
-                    fontSize: 50,
-                    letterSpacing: 0.5,
-                    color: brand.caption_color,
-                    textShadow: "0 2px 8px rgba(0,0,0,0.5)",
-                  }}
-                >
-                  {label(item.label)}
-                </div>
+                {label(item.label)}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </AbsoluteFill>
   );
@@ -431,7 +461,7 @@ export const Reel: React.FC<ReelProps> = (props) => {
         <Sequence from={introF + clipF} durationInFrames={endF}>
           <EndImageCard image={props.endImage} durationInFrames={endF} />
           {props.endCard ? (
-            <EndCardOverlay card={props.endCard} brand={props.brand} iconMap={CAPTION_ICONS} />
+            <EndCardOverlay card={props.endCard} brand={props.brand} iconMap={CAPTION_ICONS} durationInFrames={endF} />
           ) : null}
         </Sequence>
       ) : null}
