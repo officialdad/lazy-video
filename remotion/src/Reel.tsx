@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Audio,
+  Img,
   OffthreadVideo,
   Sequence,
   interpolate,
@@ -10,13 +11,111 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { mdiGestureSwipeLeft } from "@mdi/js";
+import {
+  mdiArrowDownBold,
+  mdiArrowUpBold,
+  mdiGestureSwipeLeft,
+  mdiPackageVariantClosed,
+  mdiScrewdriver,
+  mdiMemory,
+  mdiHarddisk,
+  mdiController,
+  mdiMagnify,
+  mdiCheckDecagram,
+  mdiCashMultiple,
+  mdiWrench,
+  mdiServerNetwork,
+  mdiControllerClassic,
+  mdiRobotOutline,
+  mdiPartyPopper,
+  mdiBookOpenPageVariant,
+  mdiHelpCircle,
+  mdiRocketLaunch,
+} from "@mdi/js";
 import { Captions } from "./Captions";
 import { CAPTION_FONT } from "./fonts";
 import { clipScale } from "./motion";
-import type { ReelProps } from "./schema";
+import type { EndCard, IntroCard as IntroCardData, Overlay, ReelProps } from "./schema";
+import { CURSOR_GLYPH, charsPerFrameFor, cursorVisible, revealChunks, typedCount } from "./typewriter";
 
 const src = (p: string) => (p.startsWith("http") ? p : staticFile(p));
+
+/** Logical caption icon name (schema.ts captionSchema.icon) -> MDI path data.
+    Keeps the EDL/schema free of @mdi/js internals -- a caption just names one
+    of these, never a raw mdi* export.
+    ponytail: fixed icon set (16 entries) for the chapter-card use case; upgrade
+    path if more are ever needed is to widen this map (or generate it from
+    @mdi/js's exports), not to accept raw MDI names in the EDL. */
+export const CAPTION_ICONS: Record<string, string> = {
+  package: mdiPackageVariantClosed,
+  screwdriver: mdiScrewdriver,
+  memory: mdiMemory,
+  harddisk: mdiHarddisk,
+  controller: mdiController,
+  search: mdiMagnify,
+  check: mdiCheckDecagram,
+  cash: mdiCashMultiple,
+  wrench: mdiWrench,
+  server: mdiServerNetwork,
+  gamepad: mdiControllerClassic,
+  robot: mdiRobotOutline,
+  party: mdiPartyPopper,
+  book: mdiBookOpenPageVariant,
+  help: mdiHelpCircle,
+  rocket: mdiRocketLaunch,
+};
+
+/** Bouncing MDI arrow directing attention up or down; x/y are % of the frame. */
+const ArrowOverlay: React.FC<{ o: Overlay; color: string }> = ({ o, color }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 200 } });
+  const bob = Math.sin((frame / fps) * Math.PI * 2 * 1.4) * 16; // gentle 1.4 Hz bounce
+  const along = o.dir === "up" ? -bob : bob;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${o.x}%`,
+        top: `${o.y}%`,
+        transform: `translate(-50%, -50%) translateY(${along}px) scale(${interpolate(pop, [0, 1], [0.3, 1])})`,
+      }}
+    >
+      <svg viewBox="0 0 24 24" width={130} height={130}>
+        <path
+          d={o.dir === "up" ? mdiArrowUpBold : mdiArrowDownBold}
+          fill={color}
+          stroke="rgba(0,0,0,0.6)"
+          strokeWidth={0.6}
+        />
+      </svg>
+    </div>
+  );
+};
+
+/** Pulsing outline drawing attention to a screen region; x/y/w/h are % of the frame. */
+const HighlightOverlay: React.FC<{ o: Overlay; color: string }> = ({ o, color }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 200 } });
+  const pulse = 0.55 + 0.45 * Math.abs(Math.sin((frame / fps) * Math.PI * 1.6));
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${o.x}%`,
+        top: `${o.y}%`,
+        width: `${o.w}%`,
+        height: `${o.h}%`,
+        border: `6px solid ${color}`,
+        borderRadius: 16,
+        boxShadow: `0 0 26px ${color}88, inset 0 0 26px ${color}44`,
+        opacity: pulse * pop,
+        transform: `scale(${interpolate(pop, [0, 1], [1.15, 1])})`,
+      }}
+    />
+  );
+};
 
 /** The content clip: blurred cover background + sharp contained foreground with motion. */
 const ContentClip: React.FC<ReelProps> = (props) => {
@@ -93,7 +192,24 @@ const ContentClip: React.FC<ReelProps> = (props) => {
         position={props.brand.caption_position}
         uppercase={props.brand.caption_uppercase}
         maxWords={props.brand.caption_max_words}
+        iconMap={CAPTION_ICONS}
+        textAnimation={props.brand.text_animation}
       />
+
+      {/* attention overlays (arrows / highlight boxes) at clip-local times */}
+      {(props.overlays ?? []).map((o, i) => (
+        <Sequence
+          key={i}
+          from={Math.round(o.start * fps)}
+          durationInFrames={Math.max(1, Math.round((o.end - o.start) * fps))}
+        >
+          {o.type === "arrow" ? (
+            <ArrowOverlay o={o} color={props.brand.caption_highlight_color} />
+          ) : (
+            <HighlightOverlay o={o} color={props.brand.caption_highlight_color} />
+          )}
+        </Sequence>
+      ))}
 
       {/* thin progress bar */}
       {props.brand.show_progress_bar ? (
@@ -105,13 +221,27 @@ const ContentClip: React.FC<ReelProps> = (props) => {
   );
 };
 
-/** Swipe-left CTA card: a brand panel slides in from the right (replaces the outro). */
-const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, brand }) => {
+/** Swipe-left CTA card: a brand panel slides in from the right (replaces the outro).
+    durationInFrames is this card's own Sequence-local duration (ctaF in Reel below)
+    -- useVideoConfig() only exposes the composition's total, see EndCardOverlay's
+    note -- needed to size the typewriter typing speed when text_animation is set. */
+const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"]; durationInFrames: number }> = ({
+  text,
+  brand,
+  durationInFrames,
+}) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
   const enter = spring({ frame, fps, config: { damping: 200, mass: 0.7, stiffness: 90 } });
   const x = interpolate(enter, [0, 1], [width, 0]); // from offscreen-right to 0 = swipe left
   const arrowPop = spring({ frame: frame - 6, fps, config: { damping: 200 } });
+
+  const isTypewriter = brand.text_animation === "typewriter";
+  const displayText = text.toUpperCase();
+  const charsPerFrame = charsPerFrameFor(displayText.length, durationInFrames);
+  const typed = isTypewriter ? typedCount(frame, 0, displayText.length, charsPerFrame) : displayText.length;
+  const shownText = isTypewriter ? displayText.slice(0, typed) : displayText;
+  const showCursor = isTypewriter && cursorVisible(frame, 0, displayText.length, charsPerFrame);
 
   return (
     <AbsoluteFill style={{ transform: `translateX(${x}px)`, backgroundColor: brand.bg_color }}>
@@ -137,9 +267,390 @@ const CtaCard: React.FC<{ text: string; brand: ReelProps["brand"] }> = ({ text, 
             textShadow: "0 4px 14px rgba(0,0,0,0.5)",
           }}
         >
-          {text.toUpperCase()}
+          {shownText}
+          {showCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
         </div>
         <div style={{ width: 220, height: 10, borderRadius: 6, background: brand.caption_highlight_color }} />
+      </AbsoluteFill>
+    </AbsoluteFill>
+  );
+};
+
+/** The payoff photo: held for its full duration with a slow ken-burns push-in. */
+const EndImageCard: React.FC<{ image: string; durationInFrames: number }> = ({
+  image,
+  durationInFrames,
+}) => {
+  const frame = useCurrentFrame();
+  const scale = interpolate(frame, [0, durationInFrames], [1, 1.08], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
+      <Img
+        src={src(image)}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          transform: `scale(${scale})`,
+        }}
+      />
+    </AbsoluteFill>
+  );
+};
+
+// Strong dark shadows so white text/icons stay legible directly on the photo
+// with no background scrim behind them.
+const END_CARD_TEXT_SHADOW = "0 4px 16px rgba(0,0,0,0.9), 0 2px 5px rgba(0,0,0,0.95)";
+const END_CARD_ICON_SHADOW = "drop-shadow(0 3px 10px rgba(0,0,0,0.9))";
+
+/** Payoff title + icon/label list overlaid directly on the endImage photo (no
+    scrim/panel -- legibility comes from textShadow/drop-shadow on the glyphs
+    themselves). Centered horizontally, anchored so the title lands around the
+    photo's lower-middle and items flow below it, leaving the mini PC / monitor
+    in the photo's upper half uncovered. Lives inside the same Sequence as
+    EndImageCard so it tracks the photo's timeline exactly -- see Reel's endF
+    Sequence below. Resolves icons via the passed iconMap (same threading as
+    Captions.tsx's iconMap prop) rather than importing CAPTION_ICONS directly,
+    so an unknown/missing name never throws.
+    Items reveal one at a time (title first, then each item at its own evenly-
+    spaced moment) rather than almost simultaneously -- the per-item delay is
+    derived from durationInFrames/fps (this Sequence's own duration, passed in
+    as a prop since useVideoConfig() only exposes the *composition's* total
+    duration, not a nested Sequence's) so the pacing still works if endImageDur
+    changes. */
+const EndCardOverlay: React.FC<{
+  card: EndCard;
+  brand: ReelProps["brand"];
+  iconMap: Record<string, string>;
+  durationInFrames: number;
+}> = ({ card, brand, iconMap, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const titleSpring = spring({ frame, fps, config: { damping: 200, mass: 0.6, stiffness: 120 } });
+  const titleOpacity = interpolate(titleSpring, [0, 1], [0, 1]);
+  const titleY = interpolate(titleSpring, [0, 1], [30, 0]);
+  const titleIcon = card.icon ? iconMap[card.icon] : undefined;
+
+  const label = (t: string) => (brand.caption_uppercase ? t.toUpperCase() : t);
+
+  // Spread items evenly across the beat: item i lands at (i+1)/(items+1) of the
+  // way through, e.g. 3 items in a 10s beat land at ~2.5s/5s/7.5s -- each its
+  // own moment, with the full list settled well before the beat ends.
+  const durationSec = durationInFrames / fps;
+  const itemGapSec = durationSec / (card.items.length + 1);
+
+  // brand.text_animation === "typewriter": title types first (across the slot
+  // before the first item lands), then each item's label types across its own
+  // evenly-spaced slot (itemGapSec, same spacing as the pop-in stagger above)
+  // once that item's row starts revealing. Every element below picks its own
+  // startFrame/duration off the same itemGapSec beat, so a cursor only ever
+  // blinks on whichever title/label is currently "typing" -- no coordination
+  // needed between them.
+  const isTypewriter = brand.text_animation === "typewriter";
+  const titleText = label(card.title);
+  const titleWindowFrames = Math.max(1, Math.round(itemGapSec * fps));
+  const titleCharsPerFrame = charsPerFrameFor(titleText.length, titleWindowFrames);
+  const titleTyped = isTypewriter ? typedCount(frame, 0, titleText.length, titleCharsPerFrame) : titleText.length;
+  const titleShown = isTypewriter ? titleText.slice(0, titleTyped) : titleText;
+  const titleCursor = isTypewriter && cursorVisible(frame, 0, titleText.length, titleCharsPerFrame);
+
+  return (
+    <AbsoluteFill
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        // ponytail: fixed paddingTop anchor (title lands ~45% down) rather than
+        // measuring rendered text height to truly center the block in the lower
+        // half; upgrade path if content length varies a lot is to switch to a
+        // justify-content: center layout within a bounded lower region.
+        paddingTop: "45%",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 18,
+          opacity: titleOpacity,
+          transform: `translateY(${titleY}px)`,
+        }}
+      >
+        {titleIcon ? (
+          <svg viewBox="0 0 24 24" width={88} height={88} style={{ filter: END_CARD_ICON_SHADOW }}>
+            <path d={titleIcon} fill={brand.caption_highlight_color} />
+          </svg>
+        ) : null}
+        <div
+          style={{
+            fontFamily: CAPTION_FONT,
+            fontWeight: 900,
+            fontSize: 104,
+            letterSpacing: 1,
+            lineHeight: 1.05,
+            color: brand.caption_highlight_color,
+            textShadow: END_CARD_TEXT_SHADOW,
+            maxWidth: "92%",
+          }}
+        >
+          {titleShown}
+          {titleCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 34, marginTop: 52 }}>
+        {card.items.map((item, i) => {
+          // sequential reveal: title settles first, then each item pops in on
+          // its own evenly-spaced beat (see itemGapSec above) and stays put
+          const delayFrames = Math.round((i + 1) * itemGapSec * fps);
+          const rowSpring = spring({
+            frame: frame - delayFrames,
+            fps,
+            config: { damping: 200, mass: 0.6, stiffness: 120 },
+          });
+          const opacity = interpolate(rowSpring, [0, 1], [0, 1]);
+          const y = interpolate(rowSpring, [0, 1], [30, 0]);
+          const scale = interpolate(rowSpring, [0, 1], [0.85, 1]);
+          const itemIcon = item.icon ? iconMap[item.icon] : undefined;
+
+          const labelText = label(item.label);
+          const itemWindowFrames = Math.max(1, Math.round(itemGapSec * fps));
+          const itemCharsPerFrame = charsPerFrameFor(labelText.length, itemWindowFrames);
+          const itemTyped = isTypewriter
+            ? typedCount(frame, delayFrames, labelText.length, itemCharsPerFrame)
+            : labelText.length;
+          const itemShown = isTypewriter ? labelText.slice(0, itemTyped) : labelText;
+          const itemCursor = isTypewriter && cursorVisible(frame, delayFrames, labelText.length, itemCharsPerFrame);
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 20,
+                opacity,
+                transform: `translateY(${y}px) scale(${scale})`,
+              }}
+            >
+              {itemIcon ? (
+                <svg viewBox="0 0 24 24" width={64} height={64} style={{ filter: END_CARD_ICON_SHADOW }}>
+                  <path d={itemIcon} fill={brand.caption_highlight_color} />
+                </svg>
+              ) : null}
+              <div
+                style={{
+                  fontFamily: CAPTION_FONT,
+                  fontWeight: 900,
+                  fontSize: 72,
+                  letterSpacing: 0.5,
+                  color: brand.caption_color,
+                  textShadow: END_CARD_TEXT_SHADOW,
+                }}
+              >
+                {itemShown}
+                {itemCursor ? <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// The hero photo bakes in its own dark red-to-black background; brand.bg_color
+// defaults to a navy (#0B132B) that visibly seams against it, so the card
+// letterboxes with a plain near-black instead -- ponytail: simplest fix that
+// blends with the image's edges without touching the shared brand palette.
+const INTRO_CARD_BG = "#0a0605";
+
+/** Split the hook text into (text, highlight) runs so the product term reads
+    as an accent. Looks for "MINI PC" verbatim (case-insensitive) first; if the
+    copy ever changes and that phrase isn't present, falls back to highlighting
+    the last two words -- ponytail: good enough to keep the accent robust to
+    exact wording without a full keyword-list config. */
+function splitHookText(text: string): { text: string; highlight: boolean }[] {
+  const idx = text.toUpperCase().indexOf("MINI PC");
+  if (idx !== -1) {
+    return [
+      { text: text.slice(0, idx), highlight: false },
+      { text: text.slice(idx, idx + "MINI PC".length), highlight: true },
+      { text: text.slice(idx + "MINI PC".length), highlight: false },
+    ].filter((seg) => seg.text.length > 0);
+  }
+  const words = text.split(" ");
+  if (words.length <= 2) {
+    return [{ text, highlight: true }];
+  }
+  return [
+    { text: words.slice(0, -2).join(" ") + " ", highlight: false },
+    { text: words.slice(-2).join(" "), highlight: true },
+  ];
+}
+
+/** Stylized product-hero intro: the hero photo (mini PC in a palm) fills the
+    upper two-thirds, ken-burns zooming in slowly, shown in the intro Sequence
+    in place of the video sting when props.introCard is set (see render.py's
+    intro_card staging -- takes precedence over introSrc). The hook text pops
+    up in the lower third a beat after the photo settles, over a dark scrim for
+    legibility, with its product term ("MINI PC") picked out in the brand
+    highlight colour and a wipe-in accent bar underneath. An optional small
+    logo chip can sit in a top corner; card.logo === "" renders nothing. No
+    exit animation -- the Sequence just ends into content. */
+const IntroCard: React.FC<{
+  card: IntroCardData;
+  brand: ReelProps["brand"];
+  durationInFrames: number;
+}> = ({ card, brand, durationInFrames }) => {
+  const frame = useCurrentFrame();
+  const { fps, width } = useVideoConfig();
+  const isTypewriter = brand.text_animation === "typewriter";
+
+  // image fades in and starts its slow zoom right away
+  const imageSpring = spring({ frame, fps, config: { damping: 200, mass: 0.5, stiffness: 140 } });
+  const imageOpacity = interpolate(imageSpring, [0, 1], [0, 1]);
+  const imageZoom = interpolate(frame, [0, durationInFrames], [1.0, 1.06], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
+  // hook text follows a short stagger after the image, sized off the card's own
+  // duration (not a fixed frame count) so the pacing still works if duration_sec changes
+  // -- default mode only; typewriter mode starts typing at frame 0 (see below).
+  const textDelayFrames = Math.round(durationInFrames * 0.28);
+  const textSpring = spring({
+    frame: frame - textDelayFrames,
+    fps,
+    config: { damping: 200, mass: 0.6, stiffness: 120 },
+  });
+  const textOpacity = interpolate(textSpring, [0, 1], [0, 1]);
+  const textY = interpolate(textSpring, [0, 1], [40, 0]);
+
+  const displayText = brand.caption_uppercase ? card.text.toUpperCase() : card.text;
+  const segments = splitHookText(displayText);
+
+  // typewriter: type across all segments' text in one running character
+  // budget so splitHookText's highlight/base split survives typing (a
+  // segment may show only its first k characters) -- mirrors Captions.tsx's
+  // per-word walk, generalised to per-segment via revealChunks. Typing
+  // starts at frame 0 (the card's intro duration is short -- ~2s -- so the
+  // full duration is used as the typing window, per the "intro
+  // durationInFrames" example in the spec) rather than waiting out the
+  // default entrance stagger; the per-character reveal is itself the
+  // entrance, so the fade/slide spring above is skipped in this mode.
+  const totalChars = segments.reduce((n, s) => n + s.text.length, 0);
+  const textCharsPerFrame = charsPerFrameFor(totalChars, durationInFrames);
+  const textTyped = isTypewriter ? typedCount(frame, 0, totalChars, textCharsPerFrame) : totalChars;
+  const showTextCursor = isTypewriter && cursorVisible(frame, 0, totalChars, textCharsPerFrame);
+  const revealedSegments = revealChunks(
+    segments.map((s) => ({ text: s.text, meta: s.highlight })),
+    textTyped,
+  );
+  // typing finishes at this frame -- the accent bar wipes in a beat after,
+  // instead of the default's fixed stagger-based delay, so it never appears
+  // mid-type.
+  const typingDoneFrame = textCharsPerFrame > 0 ? totalChars / textCharsPerFrame : 0;
+
+  // accent bar wipes in a beat after the text lands
+  const barDelayFrames = isTypewriter
+    ? Math.round(typingDoneFrame + fps * 0.15)
+    : textDelayFrames + Math.round(fps * 0.15);
+  const barSpring = spring({
+    frame: frame - barDelayFrames,
+    fps,
+    config: { damping: 200, mass: 0.5, stiffness: 140 },
+  });
+  const barScale = interpolate(barSpring, [0, 1], [0, 1]);
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: INTRO_CARD_BG }}>
+      {card.image ? (
+        <AbsoluteFill style={{ justifyContent: "flex-start", alignItems: "center", opacity: imageOpacity }}>
+          <Img
+            src={src(card.image)}
+            style={{
+              width: "100%",
+              height: "66%",
+              objectFit: "contain", // keep the whole palm shot + baked-in spec callouts visible, never cropped
+              transform: `scale(${imageZoom})`,
+            }}
+          />
+        </AbsoluteFill>
+      ) : null}
+
+      {/* dark gradient scrim behind the lower-third hook so it stays legible
+          regardless of what's behind it */}
+      <AbsoluteFill
+        style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0) 45%, rgba(0,0,0,0.85) 100%)" }}
+      />
+
+      {card.logo ? (
+        <div style={{ position: "absolute", top: 40, left: 40 }}>
+          <Img src={src(card.logo)} style={{ width: width * 0.14, height: "auto" }} />
+        </div>
+      ) : null}
+
+      {/* typewriter mode nudges the hook up a bit (paddingBottom 9% -> 12%) to
+          shrink the dark gap between the image and the text; default mode is
+          left exactly as it was. */}
+      <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: isTypewriter ? "12%" : "9%" }}>
+        <div
+          style={{
+            opacity: isTypewriter ? 1 : textOpacity,
+            transform: isTypewriter ? undefined : `translateY(${textY}px)`,
+            fontFamily: CAPTION_FONT,
+            fontWeight: 900,
+            fontSize: 92,
+            letterSpacing: 1,
+            lineHeight: 1.1,
+            textAlign: "center",
+            maxWidth: "86%",
+            textShadow: END_CARD_TEXT_SHADOW,
+          }}
+        >
+          {isTypewriter
+            ? revealedSegments.map((chunk, i) =>
+                chunk.shown ? (
+                  <span
+                    key={i}
+                    style={{
+                      color: chunk.meta ? brand.caption_highlight_color : brand.caption_color,
+                      // keep "MINI PC" from breaking across lines (the bug this
+                      // task fixes) -- only the highlighted accent segment needs it
+                      whiteSpace: chunk.meta ? "nowrap" : undefined,
+                    }}
+                  >
+                    {chunk.shown}
+                    {chunk.isCurrent && showTextCursor ? (
+                      <span style={{ color: brand.caption_highlight_color }}>{CURSOR_GLYPH}</span>
+                    ) : null}
+                  </span>
+                ) : null,
+              )
+            : segments.map((seg, i) => (
+                <span key={i} style={{ color: seg.highlight ? brand.caption_highlight_color : brand.caption_color }}>
+                  {seg.text}
+                </span>
+              ))}
+        </div>
+        <div
+          style={{
+            marginTop: 28,
+            width: 180,
+            height: 10,
+            borderRadius: 6,
+            background: brand.caption_highlight_color,
+            transform: `scaleX(${barScale})`,
+          }}
+        />
       </AbsoluteFill>
     </AbsoluteFill>
   );
@@ -150,6 +661,7 @@ export const Reel: React.FC<ReelProps> = (props) => {
   const introF = Math.round(props.introDur * fps);
   const clipF = Math.round(props.clipDur * fps);
   const ctaF = Math.round(props.cta.durationSec * fps);
+  const endF = props.endImage ? Math.round(props.endImageDur * fps) : 0;
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.brand.bg_color }}>
@@ -158,6 +670,7 @@ export const Reel: React.FC<ReelProps> = (props) => {
         <Audio
           src={src(props.bgMusic)}
           loop
+          trimBefore={Math.round(props.bgMusicOffset * fps)}
           volume={(f) =>
             interpolate(
               f,
@@ -169,11 +682,15 @@ export const Reel: React.FC<ReelProps> = (props) => {
         />
       ) : null}
 
-      {introF > 0 && props.introSrc ? (
-        <Sequence durationInFrames={introF}>
-          <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
-            <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </AbsoluteFill>
+      {introF > 0 && (props.introCard || props.introSrc) ? (
+        <Sequence from={0} durationInFrames={introF}>
+          {props.introCard ? (
+            <IntroCard card={props.introCard} brand={props.brand} durationInFrames={introF} />
+          ) : (
+            <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+              <OffthreadVideo src={src(props.introSrc)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </AbsoluteFill>
+          )}
         </Sequence>
       ) : null}
 
@@ -181,8 +698,17 @@ export const Reel: React.FC<ReelProps> = (props) => {
         <ContentClip {...props} />
       </Sequence>
 
-      <Sequence from={introF + clipF} durationInFrames={ctaF}>
-        <CtaCard text={props.cta.text} brand={props.brand} />
+      {endF > 0 ? (
+        <Sequence from={introF + clipF} durationInFrames={endF}>
+          <EndImageCard image={props.endImage} durationInFrames={endF} />
+          {props.endCard ? (
+            <EndCardOverlay card={props.endCard} brand={props.brand} iconMap={CAPTION_ICONS} durationInFrames={endF} />
+          ) : null}
+        </Sequence>
+      ) : null}
+
+      <Sequence from={introF + clipF + endF} durationInFrames={ctaF}>
+        <CtaCard text={props.cta.text} brand={props.brand} durationInFrames={ctaF} />
       </Sequence>
     </AbsoluteFill>
   );

@@ -17,7 +17,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -46,19 +48,43 @@ def ffprobe_dims(path: Path) -> tuple[int, int]:
 
 
 def cut_points_sec(keep_ranges: list[list[float]]) -> list[float]:
-    """Clip-local times where shots join (punch-in points), plus 0 for the opening."""
+    """Clip-local times where shots join (punch-in points), plus 0 for the opening.
+
+    keep_ranges are source-time (start, end[, speed]); a sped-up range occupies
+    only duration/speed on the clip's own timeline."""
     points = [0.0]
     cum = 0.0
     for r in keep_ranges[:-1]:
-        cum += r[1] - r[0]
+        speed = r[2] if len(r) > 2 else 1.0
+        cum += (r[1] - r[0]) / speed
         points.append(round(cum, 3))
     return points
 
 
+def stage_asset(rel: str, public_dir: Path) -> str:
+    """Copy a repo-relative asset into the render staging dir; return its basename.
+
+    Remotion resolves props through staticFile() against the staging dir, so the
+    name must be filesystem- and URL-safe: 'Circuit Rush - The Mini Vandals.mp3'
+    becomes 'Circuit_Rush_-_The_Mini_Vandals.mp3'. The staged name is prefixed with
+    a short hash of the full repo-relative path (not just the basename), so two
+    different source paths can never collide in the shared staging dir even if
+    their basenames sanitize to the same string; the same rel staged twice always
+    resolves to the same file."""
+    src_path = ROOT / rel
+    if not src_path.exists():
+        sys.exit(f"[render] missing asset: {rel}")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", Path(rel).name)
+    digest = hashlib.sha1(rel.encode("utf-8")).hexdigest()[:8]
+    dest = public_dir / f"{digest}_{safe_name}"
+    shutil.copy2(src_path, dest)
+    return dest.name
+
+
 def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
                 intro_src: str, intro_dur: float, out_dir: Path,
-                bg_music_src: str = "", bg_music_vol: float = 0.0,
-                extra_flags: list[str] | None = None) -> Path:
+                extra_flags: list[str] | None = None,
+                intro_card_prop: dict | None = None) -> Path:
     """Render one reel. Media is staged in public_dir; props use basenames."""
     cues = json.loads(cues_path.read_text(encoding="utf-8"))
     clip_path = cues_path.with_name(cues["clip"])
@@ -78,19 +104,33 @@ def render_clip(cues_path: Path, cfg: cfg_t, public_dir: Path,
     brand.setdefault("bg_color", "#0B132B")
     cta = brand.get("cta", {"text": "FOLLOW & STAY TUNED", "duration_sec": 1.6})
 
+    # per-segment overrides beat config; config beats nothing
+    music_rel = cues.get("bg_music") or cfg["brand"].get("bg_music", "")
+    bg_src = stage_asset(music_rel, public_dir) if music_rel else ""
+    bg_vol = cfg["brand"].get("bg_music_volume", 0.15) if bg_src else 0.0
+    image_rel = cues.get("end_image") or ""
+    end_src = stage_asset(image_rel, public_dir) if image_rel else ""
+    cta_dur = cues.get("cta_duration_sec") or cta.get("duration_sec", 1.6)
+
     props = {
         "clipSrc": clip_path.name,        # basename; public dir = staging dir
         "introSrc": intro_src,            # "" when intro disabled (reel starts cold)
         "introDur": intro_dur,
+        "introCard": intro_card_prop,     # None = no card; takes precedence over introSrc in Reel.tsx
         "clipDur": cues["duration"],
         "title": cues["title"],
         "intensity": cues["intensity"],
         "captions": cues["captions"],     # each caption carries per-word timing
+        "overlays": cues.get("overlays", []),
+        "endImage": end_src,
+        "endImageDur": cues.get("end_image_dur", 0.0),
+        "endCard": cues.get("end_card"),
         "cutPointsSec": cut_points_sec(cues["keep_ranges"]),
-        "cta": {"text": cta["text"], "durationSec": cta.get("duration_sec", 1.6)},
+        "cta": {"text": cta["text"], "durationSec": cta_dur},
         "brand": brand,
-        "bgMusic": bg_music_src,
-        "bgMusicVolume": bg_music_vol,
+        "bgMusic": bg_src,
+        "bgMusicVolume": bg_vol,
+        "bgMusicOffset": cues.get("bg_music_offset", 0.0),
         "coverBg": cover_bg,
     }
     props_path = public_dir / f"{name}.props.json"
@@ -150,26 +190,29 @@ def run(video: Path, cfg: dict | None = None, *,
     public_dir = out_dir / "_render_public"
     public_dir.mkdir(parents=True, exist_ok=True)
 
-    # intro is off by default -- reels start cold on content (the hook).
-    if cfg["brand"].get("show_intro", False):
+    # intro is off by default -- reels start cold on content (the hook). A still
+    # card (logo + hook text) takes precedence over the video sting when both
+    # are configured.
+    intro_card_cfg = cfg["brand"].get("intro_card")
+    if intro_card_cfg:
+        logo_rel = intro_card_cfg.get("logo") or ""
+        image_rel = intro_card_cfg.get("image") or ""
+        logo_basename = stage_asset(logo_rel, public_dir) if logo_rel else ""
+        image_basename = stage_asset(image_rel, public_dir) if image_rel else ""
+        intro_src, intro_dur = "", intro_card_cfg["duration_sec"]
+        intro_card_prop = {"logo": logo_basename, "image": image_basename, "text": intro_card_cfg["text"]}
+    elif cfg["brand"].get("show_intro", False):
         intro = ROOT / cfg["brand"]["intro_asset"]
         shutil.copy2(intro, public_dir / "intro.mp4")
         intro_src, intro_dur = "intro.mp4", ffprobe_duration(intro)
+        intro_card_prop = None
     else:
         intro_src, intro_dur = "", 0.0
-
-    # stage optional background music into the public dir (referenced by basename)
-    bg_music = cfg["brand"].get("bg_music", "")
-    if bg_music:
-        bgm_ext = Path(bg_music).suffix or ".mp3"
-        shutil.copy2(ROOT / bg_music, public_dir / f"bgm{bgm_ext}")
-        bg_src, bg_vol = f"bgm{bgm_ext}", cfg["brand"].get("bg_music_volume", 0.15)
-    else:
-        bg_src, bg_vol = "", 0.0
+        intro_card_prop = None
 
     try:
         outputs = [render_clip(cf, cfg, public_dir, intro_src, intro_dur, out_dir,
-                               bg_src, bg_vol, extra_flags)
+                               extra_flags, intro_card_prop=intro_card_prop)
                    for cf in cue_files]
     finally:
         shutil.rmtree(public_dir, ignore_errors=True)

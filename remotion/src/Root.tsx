@@ -13,6 +13,7 @@ const DEFAULT_BRAND = {
   caption_bg: "rgba(0,0,0,0.55)",
   show_progress_bar: true,
   bg_color: "#0B132B",
+  text_animation: "default" as const,
 };
 
 // Preview defaults; the real values are injected per-render via --props.
@@ -20,6 +21,7 @@ const DEFAULT_PROPS: ReelProps = {
   clipSrc: "01_rm80-boleh-buat-apa.mp4",
   introSrc: "",
   introDur: 0,
+  introCard: null,
   clipDur: 6,
   title: "RM80 Boleh Buat Apa?",
   intensity: "gentle",
@@ -33,12 +35,18 @@ const DEFAULT_PROPS: ReelProps = {
         { w: "Assalamualaikum", start: 0.2, end: 1.4 },
         { w: "semua", start: 1.4, end: 2.2 },
       ],
+      icon: "",
     },
   ],
+  overlays: [],
+  endImage: "",
+  endImageDur: 0,
+  endCard: null,
   cta: { text: "FOLLOW & STAY TUNED", durationSec: 1.6 },
   brand: DEFAULT_BRAND,
   bgMusic: "",
   bgMusicVolume: 0.15,
+  bgMusicOffset: 0,
   coverBg: true,
 };
 
@@ -56,7 +64,11 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       durationInFrames={Math.round((0 + 6 + 1.6) * FPS)}
       calculateMetadata={({ props }) => ({
-        durationInFrames: Math.round((props.introDur + props.clipDur + props.cta.durationSec) * FPS),
+        // Gate endImageDur on endImage presence to match Reel.tsx's endF calculation (line 246).
+        // Without this, a non-empty endImageDur but empty endImage would pad composition with phantom frames.
+        durationInFrames: Math.round(
+          (props.introDur + props.clipDur + (props.endImage ? props.endImageDur : 0) + props.cta.durationSec) * FPS,
+        ),
         fps: FPS,
         width: 1080,
         height: 1920,

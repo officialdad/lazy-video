@@ -23,6 +23,8 @@ import re
 import sys
 from pathlib import Path
 
+from .config import ROOT
+
 EPS = 0.05  # tolerance for float timing comparisons
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -58,6 +60,52 @@ def validate(edl: dict) -> list[str]:
             if prev_end is not None and cs < prev_end - EPS:
                 errs.append(f"{tag}: cut {cs}-{ce} overlaps previous cut ending {prev_end}")
             prev_end = ce
+
+        # speedups (optional): fast-forward regions, e.g. a no-speech coding demo.
+        # factor > 1, inside span, must not overlap a cut (cut wins -> ambiguous).
+        for z in sorted(seg.get("speedups") or [], key=lambda z: z["start"]):
+            zs, ze, f = z.get("start"), z.get("end"), z.get("factor")
+            if zs is None or ze is None or zs >= ze:
+                errs.append(f"{tag}: speedup {zs}-{ze} has non-positive length")
+                continue
+            if not isinstance(f, (int, float)) or f <= 1.0:
+                errs.append(f"{tag}: speedup {zs}-{ze} factor {f!r} must be > 1")
+            if zs < start - EPS or ze > end + EPS:
+                errs.append(f"{tag}: speedup {zs}-{ze} outside segment span {start}-{end}")
+            for c in cuts:
+                if zs < c["end"] - EPS and c["start"] < ze - EPS:
+                    errs.append(f"{tag}: speedup {zs}-{ze} overlaps cut {c['start']}-{c['end']}")
+
+        # optional per-segment overrides: a music track, its start offset, the payoff
+        # photo and the CTA length. Assets are checked here because discovering a bad
+        # path during a render wastes the whole cut that preceded it.
+        for key in ("bg_music", "end_image"):
+            rel = seg.get(key)
+            if rel and not (ROOT / rel).exists():
+                errs.append(f"{tag}: {key} {rel!r} does not exist")
+        for key in ("end_image_dur", "cta_duration_sec"):
+            v = seg.get(key)
+            if v is not None and (not isinstance(v, (int, float)) or v <= 0):
+                errs.append(f"{tag}: {key} {v!r} must be a positive number")
+        off = seg.get("bg_music_offset")
+        if off is not None and (not isinstance(off, (int, float)) or off < 0):
+            errs.append(f"{tag}: bg_music_offset {off!r} must be >= 0")
+
+        # end_card (optional): title + icon/label payoff list over the end photo.
+        end_card = seg.get("end_card")
+        if end_card is not None:
+            if not isinstance(end_card, dict):
+                errs.append(f"{tag}: end_card must be an object")
+            else:
+                if not (end_card.get("title") or "").strip():
+                    errs.append(f"{tag}: end_card.title is empty")
+                items = end_card.get("items")
+                if not items:
+                    errs.append(f"{tag}: end_card.items is empty")
+                else:
+                    for i, item in enumerate(items):
+                        if not isinstance(item, dict) or not (item.get("label") or "").strip():
+                            errs.append(f"{tag}: end_card.items[{i}] has an empty label")
 
         for cap in seg.get("captions") or []:
             ctag = f"{tag} caption {cap.get('start')}s {cap.get('text', '')[:30]!r}"
